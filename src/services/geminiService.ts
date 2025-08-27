@@ -74,7 +74,7 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
     
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
+            model: 'gemini-2.5-flash',
             contents: { parts: [ {text: prompt}, imagePart ]},
             config: {
                 responseMimeType: "application/json",
@@ -148,7 +148,7 @@ export const getDesignThemes = async (imageFile: File, objects: DetectedObject[]
 
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
+            model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }, imagePart] },
             config: {
                 responseMimeType: "application/json",
@@ -233,7 +233,7 @@ export const changeColor = async (
     const textPart = { text: prompt };
 
     const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
+        model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, textPart] },
         config: {
             responseModalities: [Modality.IMAGE, Modality.TEXT],
