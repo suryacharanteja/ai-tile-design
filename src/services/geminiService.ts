@@ -74,7 +74,7 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
     
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-image-preview',
             contents: { parts: [ {text: prompt}, imagePart ]},
             config: {
                 responseMimeType: "application/json",
