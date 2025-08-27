@@ -55,10 +55,10 @@ const fileToPart = async (file: File): Promise<{ inlineData: { mimeType: string;
  * @returns A promise that resolves to an array of detected objects.
  */
 export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> => {
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable is not set");
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
     }
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const imagePart = await fileToPart(imageFile);
 
     const prompt = `
@@ -129,10 +129,10 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
  * @returns A promise that resolves to an array of design themes.
  */
 export const getDesignThemes = async (imageFile: File, objects: DetectedObject[]): Promise<DesignTheme[]> => {
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable is not set");
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
     }
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const imagePart = await fileToPart(imageFile);
     const objectNames = objects.map(o => o.name).join(', ');
 
@@ -207,10 +207,10 @@ export const changeColor = async (
   selectedColor: string | null,
   customPrompt: string
 ): Promise<string> => {
-    if (!process.env.API_KEY) {
-        throw new Error("API_KEY environment variable is not set");
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
     }
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const imagePart = await fileToPart(imageFile);
 
     const instruction = customPrompt 
