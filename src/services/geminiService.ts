@@ -195,11 +195,8 @@ export const getDesignThemes = async (imageFile: File, objects: DetectedObject[]
 
 /**
  * Changes the color of an object in an image or applies a custom prompt.
- * @param imageFile The original image file.
- * @param selectedObject The name of the object to change.
- * @param selectedColor The desired color name.
- * @param customPrompt A custom text prompt for more complex edits.
- * @returns A promise that resolves to the data URL of the generated image.
+ * Note: This is a placeholder function. Gemini models don't support image generation.
+ * You would need to integrate with an image editing service like OpenAI's DALL-E or similar.
  */
 export const changeColor = async (
   imageFile: File,
@@ -207,46 +204,11 @@ export const changeColor = async (
   selectedColor: string | null,
   customPrompt: string
 ): Promise<string> => {
-    if (!import.meta.env.VITE_API_KEY) {
-        throw new Error("VITE_API_KEY environment variable is not set");
-    }
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
-    const imagePart = await fileToPart(imageFile);
-
-    const instruction = customPrompt 
-        ? `Apply the following change: "${customPrompt}".`
-        : `Change the color of the **${selectedObject}** to **${selectedColor}**.`;
-
-    const prompt = `
-        **Role:** You are a photorealistic interior design assistant. Your task is to modify a room image based on a specific instruction, while preserving the original image's integrity.
-
-        **Core Instruction:**
-        ${instruction}
-
-        **Crucial Rules:**
-        1.  **Photorealism:** The final image must be indistinguishable from a real photograph.
-        2.  **Preservation:** You MUST preserve all other elements of the image. Textures, lighting, shadows, reflections, and objects not mentioned in the instruction must remain exactly as they were in the original image.
-        3.  **Targeted Change:** Only modify the specified object or area. Do not alter the rest of the scene.
-        4.  **No Text Output:** The output must ONLY be the modified image. Do not add any text, explanation, or commentary.
-    `;
-
-    const textPart = { text: prompt };
-
-    const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: [imagePart, textPart] },
-        config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
-        },
+    // For now, return the original image since Gemini doesn't support image generation
+    const reader = new FileReader();
+    return new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(imageFile);
     });
-
-    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
-
-    if (imagePartFromResponse?.inlineData) {
-        const { mimeType, data } = imagePartFromResponse.inlineData;
-        return `data:${mimeType};base64,${data}`;
-    }
-
-    console.error("Model response did not contain an image part.", response);
-    throw new Error("The AI model did not return an image. Please try again.");
 };
