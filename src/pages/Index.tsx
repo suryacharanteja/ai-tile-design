@@ -819,40 +819,41 @@ ${otherObjectsContext}
       <div className="space-y-8">
         {/* Placement Progress Indicator */}
         {isReadyToPlace && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+          <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border-2 border-emerald-300 rounded-xl p-6 shadow-lg animate-pulse-slow">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
-                <span className="text-sm font-semibold text-zinc-700">Object Selected</span>
-                <div className="w-4 h-px bg-zinc-300"></div>
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold animate-pulse">2</div>
-                <span className="text-sm font-semibold text-blue-600">Click to Place</span>
+                <div className="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold">✓</div>
+                <span className="text-sm font-semibold text-emerald-800">Object Selected</span>
+                <div className="w-8 h-px bg-emerald-400"></div>
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold animate-bounce">2</div>
+                <span className="text-sm font-semibold text-blue-600 animate-pulse">CLICK ON ROOM IMAGE!</span>
               </div>
             </div>
-            <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+            <div className="bg-white rounded-lg p-4 border-2 border-blue-300 shadow-md">
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
                   {selectedProduct ? (
-                    <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-8 h-8 object-contain" />
+                    <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-10 h-10 object-contain" />
                   ) : (
-                    <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-semibold text-zinc-800">
+                  <p className="font-bold text-lg text-zinc-800">
                     {selectedProduct ? selectedProduct.name : placementPrompt}
                   </p>
-                  <p className="text-sm text-zinc-600">Ready to place in your room</p>
+                  <p className="text-blue-700 font-semibold">Ready to place in your room</p>
+                  <p className="text-sm text-zinc-600 mt-1">👆 Click anywhere on the room image below to place this object</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-zinc-500 mb-1">Next Step</p>
-                  <div className="flex items-center space-x-2 text-blue-600">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="text-right bg-blue-50 p-3 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-600 font-semibold mb-1">NEXT STEP</p>
+                  <div className="flex items-center space-x-2 text-blue-700">
+                    <svg className="w-5 h-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                     </svg>
-                    <span className="text-sm font-semibold">Click on image →</span>
+                    <span className="text-sm font-bold">CLICK ROOM IMAGE</span>
                   </div>
                 </div>
               </div>
@@ -1105,9 +1106,9 @@ ${otherObjectsContext}
             <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-bold">{title}</h2>
                 {isPlacementMode && (
-                    <div className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
-                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                        <span>Click to place object</span>
+                    <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg animate-pulse">
+                        <div className="w-3 h-3 bg-white rounded-full animate-bounce"></div>
+                        <span>👆 CLICK ROOM IMAGE TO PLACE!</span>
                     </div>
                 )}
                 {isRemovalMode && (
@@ -1219,12 +1220,18 @@ ${otherObjectsContext}
                     </div>
                 )}
 
-                {/* Placement instruction overlay moved to top-left of image for better UX */}
+                {/* Enhanced placement instruction overlay */}
                 {isPlacementMode && imageUrl && (
-                    <div className="absolute top-2 left-2 bg-blue-600/90 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs font-medium pointer-events-none backdrop-blur-sm">
-                        <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                            <span>Click anywhere to place your object</span>
+                    <div className="absolute top-4 left-4 bg-gradient-to-r from-blue-600 to-emerald-600 text-white px-4 py-3 rounded-xl shadow-xl text-sm font-bold pointer-events-none backdrop-blur-sm border-2 border-white/20 animate-pulse">
+                        <div className="flex items-center space-x-3">
+                            <div className="w-3 h-3 bg-white rounded-full animate-bounce"></div>
+                            <span>CLICK ANYWHERE ON THIS IMAGE TO PLACE</span>
+                            <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
+                            </svg>
+                        </div>
+                        <div className="text-xs mt-1 opacity-90">
+                            {selectedProduct ? `Placing: ${selectedProduct.name}` : `Adding: ${placementPrompt}`}
                         </div>
                     </div>
                 )}
