@@ -314,14 +314,12 @@ const Index: React.FC = () => {
 
   const onMouseDown = (e: React.MouseEvent) => {
       if (e.button !== 0) return;
-      e.preventDefault();
       setIsPanning(true);
       panStartRef.current = { startX: e.clientX, startY: e.clientY, startPanX: pan.x, startPanY: pan.y };
   };
 
   const handleContainerMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
-        e.preventDefault();
         const dx = e.clientX - panStartRef.current.startX;
         const dy = e.clientY - panStartRef.current.startY;
         setPan({ x: panStartRef.current.startPanX + dx / zoom, y: panStartRef.current.startPanY + dy / zoom });
@@ -342,7 +340,10 @@ const Index: React.FC = () => {
     if (obj) handleObjectClick(obj.name);
   };
 
-  const onWheel = (e: React.WheelEvent) => { e.preventDefault(); handleZoom(e.deltaY > 0 ? 0.9 : 1.1); };
+  const onWheel = (e: React.WheelEvent) => { 
+    e.stopPropagation(); 
+    handleZoom(e.deltaY > 0 ? 0.9 : 1.1); 
+  };
 
   useEffect(() => {
     const handleMouseUp = () => setIsPanning(false);
