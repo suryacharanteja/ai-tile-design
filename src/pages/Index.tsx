@@ -726,6 +726,7 @@ ${otherObjectsContext}
     const exampleChips = ['a potted snake plant', 'a minimalist floor lamp', 'a large abstract wall art', 'a round wooden side table', 'a plush armchair'];
     const interiorObjects = detectedObjects.filter(o => o.category === 'interior');
     const furnitureObjects = detectedObjects.filter(o => o.category === 'furniture');
+    const isReadyToPlace = placementPrompt || selectedProduct;
 
     const handleSelectObjectToRemove = (obj: DetectedObject) => {
         setObjectToRemove(obj);
@@ -749,8 +750,51 @@ ${otherObjectsContext}
 
     return (
       <div className="space-y-8">
+        {/* Placement Progress Indicator */}
+        {isReadyToPlace && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                <span className="text-sm font-semibold text-zinc-700">Object Selected</span>
+                <div className="w-4 h-px bg-zinc-300"></div>
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold animate-pulse">2</div>
+                <span className="text-sm font-semibold text-blue-600">Click to Place</span>
+              </div>
+            </div>
+            <div className="bg-white rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                  {selectedProduct ? (
+                    <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-8 h-8 object-contain" />
+                  ) : (
+                    <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-zinc-800">
+                    {selectedProduct ? selectedProduct.name : placementPrompt}
+                  </p>
+                  <p className="text-sm text-zinc-600">Ready to place in your room</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-zinc-500 mb-1">Next Step</p>
+                  <div className="flex items-center space-x-2 text-blue-600">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                    </svg>
+                    <span className="text-sm font-semibold">Click on image →</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Section 1: Remove an Object */}
-        <div>
+        <div className={isReadyToPlace ? 'opacity-60 pointer-events-none' : ''}>
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold text-zinc-800">1. Remove an Existing Object</h3>
                  <button onClick={handleRedetectObjects} disabled={isRedetecting} className="flex items-center space-x-2 px-3 py-1 text-sm font-semibold text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-50 disabled:cursor-wait">
@@ -788,14 +832,14 @@ ${otherObjectsContext}
             </button>
         </div>
 
-        <div className="flex items-center text-zinc-500">
+        <div className={`flex items-center text-zinc-500 ${isReadyToPlace ? 'opacity-60' : ''}`}>
             <div className="flex-grow border-t border-zinc-200"></div>
             <span className="flex-shrink mx-4 text-sm font-semibold">OR</span>
             <div className="flex-grow border-t border-zinc-200"></div>
         </div>
 
         {/* Section 2: Add a New Object */}
-        <div>
+        <div className={isReadyToPlace ? 'opacity-60 pointer-events-none' : ''}>
           <h3 className="text-lg font-semibold text-zinc-800">2. Add a New Object</h3>
           <div className="mt-4 space-y-6">
               <div>
@@ -807,7 +851,7 @@ ${otherObjectsContext}
                           <button
                               key={chip}
                               onClick={() => { setPlacementPrompt(chip); setSelectedProduct(null); setObjectToRemove(null); }}
-                              className={`px-3 py-1.5 rounded-full text-sm border transition-colors capitalize ${placementPrompt === chip ? 'bg-blue-600 text-white border-blue-600' : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200'}`}
+                              className={`px-3 py-1.5 rounded-full text-sm border transition-all duration-200 capitalize ${placementPrompt === chip ? 'bg-blue-600 text-white border-blue-600 shadow-lg transform scale-105' : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200 hover:shadow-md hover:scale-102'}`}
                           >
                               {chip}
                           </button>
@@ -819,7 +863,7 @@ ${otherObjectsContext}
                       value={placementPrompt}
                       onChange={(e) => { setPlacementPrompt(e.target.value); setSelectedProduct(null); setObjectToRemove(null); }}
                       placeholder="e.g., 'a small, golden-framed mirror on the wall'"
-                      className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 transition"
+                      className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
                   />
               </div>
               
@@ -830,20 +874,16 @@ ${otherObjectsContext}
                    <p className="text-sm text-zinc-600 mt-1 mb-4">Add a product from your device (PNG with a transparent background works best).</p>
                    <button
                       onClick={() => setAddProductModalOpen(true)}
-                      className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-colors border border-dashed border-zinc-300 shadow-sm"
+                      className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-all duration-200 border border-dashed border-zinc-300 shadow-sm hover:shadow-md hover:scale-102"
                    >
-                      Add Your Own...
+                      <div className="flex items-center justify-center space-x-2">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>Add Your Own...</span>
+                      </div>
                    </button>
               </div>
-          </div>
-
-          <div className="mt-8 text-center bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg">
-              <p className="font-semibold">
-                  {placementPrompt ? `Ready to place: "${placementPrompt}"` : 
-                   selectedProduct ? `Ready to place: "${selectedProduct.name}"` : 
-                   "Define an object to add above."}
-              </p>
-              {(placementPrompt || selectedProduct) && <p className="mt-1 text-sm font-bold">Click on the 'After' image to set the location.</p>}
           </div>
 
           <AddProductModal 
@@ -852,6 +892,22 @@ ${otherObjectsContext}
               onFileSelect={handleAddProductFile}
           />
         </div>
+
+        {/* Clear Selection */}
+        {isReadyToPlace && (
+          <div className="flex justify-center">
+            <button
+              onClick={() => {
+                setPlacementPrompt('');
+                setSelectedProduct(null);
+                setObjectToRemove(null);
+              }}
+              className="px-4 py-2 text-sm text-zinc-600 hover:text-zinc-800 underline transition-colors"
+            >
+              Clear selection and choose different object
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -892,37 +948,100 @@ ${otherObjectsContext}
 
     const renderImagePanel = (title: string, imageUrl: string | null, ref: React.RefObject<HTMLImageElement>, isAfter = false) => {
         const isPlacementMode = isAfter && activeTab === 'placement' && (selectedProduct || placementPrompt);
+        const isRemovalMode = isAfter && activeTab === 'placement' && objectToRemove;
+        
         return (
         <div className="w-full">
-            <h2 className="text-xl font-bold mb-2">{title}</h2>
+            <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold">{title}</h2>
+                {isPlacementMode && (
+                    <div className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                        <span>Click to place object</span>
+                    </div>
+                )}
+                {isRemovalMode && (
+                    <div className="flex items-center space-x-2 bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-semibold">
+                        <div className="w-2 h-2 bg-red-600 rounded-full"></div>
+                        <span>Object marked for removal</span>
+                    </div>
+                )}
+            </div>
             <div 
                 ref={imageContainerRef} 
-                className={`relative w-full aspect-[4/3] bg-zinc-100 rounded-lg overflow-hidden border transition-all duration-300 ${isPlacementMode ? 'cursor-crosshair border-blue-500 ring-4 ring-blue-500/20' : 'border-zinc-200'}`}
+                className={`relative w-full aspect-[4/3] bg-zinc-100 rounded-lg overflow-hidden border transition-all duration-300 ${
+                    isPlacementMode 
+                        ? 'cursor-crosshair border-blue-500 ring-4 ring-blue-500/20 shadow-lg' 
+                        : isRemovalMode 
+                        ? 'border-red-500 ring-2 ring-red-500/20'
+                        : 'border-zinc-200'
+                }`}
                 onClick={isAfter ? handleAfterImageClick : undefined}
+                onMouseMove={(e) => {
+                    if (isPlacementMode && ref.current) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const imageRect = ref.current.getBoundingClientRect();
+                        const isOverImage = 
+                            e.clientX >= imageRect.left &&
+                            e.clientX <= imageRect.right &&
+                            e.clientY >= imageRect.top &&
+                            e.clientY <= imageRect.bottom;
+                        
+                        e.currentTarget.style.cursor = isOverImage ? 'crosshair' : 'not-allowed';
+                    }
+                }}
             >
                 {imageUrl ? (
                     <img ref={ref} src={imageUrl} alt={title} className="w-full h-full object-contain pointer-events-none" style={getImageStyle()} />
                 ) : <div className="w-full h-full flex items-center justify-center text-zinc-500">Awaiting generation...</div>}
                 
+                {/* Placement grid overlay for better precision */}
+                {isPlacementMode && imageUrl && (
+                    <div className="absolute inset-0 pointer-events-none opacity-30">
+                        <div className="w-full h-full grid grid-cols-12 grid-rows-8">
+                            {Array.from({ length: 96 }).map((_, i) => (
+                                <div key={i} className="border border-blue-200/50"></div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Crosshair guide */}
+                {isPlacementMode && imageUrl && (
+                    <>
+                        <div className="absolute top-0 left-1/2 w-px h-full bg-blue-400/50 pointer-events-none transform -translate-x-1/2"></div>
+                        <div className="absolute left-0 top-1/2 w-full h-px bg-blue-400/50 pointer-events-none transform -translate-y-1/2"></div>
+                    </>
+                )}
+                
                 {isAfter && displayImageUrl && (
-                  <button onClick={(e) => { e.stopPropagation(); setIsPreviewModalOpen(true); }} className="absolute top-2 right-2 p-2 bg-black/40 text-white rounded-full hover:bg-black/60 transition-colors" aria-label="Full screen preview">
+                  <button onClick={(e) => { e.stopPropagation(); setIsPreviewModalOpen(true); }} className="absolute top-2 right-2 p-2 bg-black/40 text-white rounded-full hover:bg-black/60 transition-colors z-10" aria-label="Full screen preview">
                     <FullScreenIcon />
                   </button>
                 )}
 
+                {/* Enhanced placement marker with ripple effect */}
                 {isAfter && placementMarker && (
                     <div
-                        className="placement-marker"
+                        className="absolute pointer-events-none"
                         style={{
                             top: `${placementMarker.y}px`,
                             left: `${placementMarker.x}px`,
+                            transform: 'translate(-50%, -50%)',
                         }}
-                    ></div>
+                    >
+                        <div className="relative">
+                            <div className="w-4 h-4 bg-green-500 rounded-full shadow-lg animate-ping"></div>
+                            <div className="absolute inset-0 w-4 h-4 bg-green-600 rounded-full shadow-lg"></div>
+                            <div className="absolute inset-1 w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                    </div>
                 )}
 
+                {/* Object selection highlights */}
                 {isAfter && selectedObject && activeTab === 'manual' && (
                     <div
-                        className="absolute border-4 border-blue-500 rounded-md pointer-events-none shadow-lg"
+                        className="absolute border-4 border-blue-500 rounded-md pointer-events-none shadow-lg animate-pulse"
                         style={{
                             left: `${selectedObject.bounding_box.x_min * 100}%`,
                             top: `${selectedObject.bounding_box.y_min * 100}%`,
@@ -931,6 +1050,7 @@ ${otherObjectsContext}
                         }}
                     ></div>
                 )}
+                
                 {isAfter && objectToRemove && activeTab === 'placement' && (
                     <div
                         className="absolute border-4 border-red-500 rounded-md pointer-events-none shadow-lg"
@@ -940,11 +1060,24 @@ ${otherObjectsContext}
                             width: `${(objectToRemove.bounding_box.x_max - objectToRemove.bounding_box.x_min) * 100}%`,
                             height: `${(objectToRemove.bounding_box.y_max - objectToRemove.bounding_box.y_min) * 100}%`,
                         }}
-                    ></div>
+                    >
+                        <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
+                            <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </div>
+                    </div>
+                )}
+
+                {/* Placement instruction overlay */}
+                {isPlacementMode && imageUrl && (
+                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-semibold pointer-events-none animate-bounce">
+                        Click anywhere to place your object
+                    </div>
                 )}
             </div>
         </div>
-      );
+    );
     };
 
     const TABS: { id: EditorTab; label: string }[] = [
