@@ -4,10 +4,15 @@
 */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { detectObjects, changeColor, getDesignThemes, DetectedObject, DesignTheme } from '../services/geminiService';
+import { detectObjects, changeColor, getDesignThemes, redesignFloor, modifyImage, DetectedObject, DesignTheme } from '../services/geminiService';
 import Header from '../components/Header';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
+import AddProductModal from '../components/AddProductModal';
+import DebugModal from '../components/DebugModal';
+import PreviewModal from '../components/PreviewModal';
+import ColorPickerPopover from '../components/ColorPickerPopover';
+import { Product, FloorCategory, floorTextures, standardPalettes } from '../types';
 
 enum AppState {
   Initial,
@@ -16,8 +21,19 @@ enum AppState {
   Generating,
 }
 
-type EditorTab = 'manual' | 'themes';
+type EditorTab = 'manual' | 'themes' | 'floor' | 'placement';
 type ColorAccordion = 'ai' | 'standard';
+
+interface AccordionState {
+  interior: boolean;
+  furniture: boolean;
+  aiColors: boolean;
+  standardColors: boolean;
+  wood: boolean;
+  stone: boolean;
+  modern: boolean;
+  carpet: boolean;
+}
 
 // --- UI Components ---
 const UndoIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>;
@@ -26,13 +42,9 @@ const ZoomInIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 
 const ZoomOutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" /></svg>;
 const ResetViewIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l16 16" /></svg>;
 const DownloadIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>;
-
-const standardPalettes = [
-    { name: 'Vibrant Accents', colors: ['#D32F2F', '#FFC107', '#0288D1', '#388E3C', '#7B1FA2', '#F57C00'] },
-    { name: 'Architectural Neutrals', colors: ['#212121', '#616161', '#BDBDBD', '#F5F5F5', '#FFFFFF', '#E8E8E8'] },
-    { name: 'Earthy Tones', colors: ['#A1887F', '#795548', '#8D6E63', '#5D4037', '#607D8B', '#455A64'] },
-    { name: 'Soft Pastels', colors: ['#F3E5F5', '#E1F5FE', '#E8F5E9', '#FFFDE7', '#FCE4EC', '#F1F8E9'] },
-];
+const ChevronDownIcon = ({ open }: { open: boolean }) => <svg className={`h-5 w-5 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>;
+const RefreshIcon = ({ spinning }: { spinning: boolean }) => <svg className={`h-4 w-4 ${spinning ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 4l16 16" /></svg>;
+const FullScreenIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>;
 
 const Index: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.Initial);
@@ -63,6 +75,31 @@ const Index: React.FC = () => {
   const [activeTab, setActiveTab] = useState<EditorTab>('manual');
   const [openAccordion, setOpenAccordion] = useState<string | null>(null);
   const [openColorAccordion, setOpenColorAccordion] = useState<ColorAccordion | null>('ai');
+
+  // New state for additional tabs
+  const [accordionState, setAccordionState] = useState<AccordionState>({
+    interior: false,
+    furniture: false, 
+    aiColors: false,
+    standardColors: false,
+    wood: false,
+    stone: false,
+    modern: false,
+    carpet: false,
+  });
+  const [products, setProducts] = useState<Product[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [placementPrompt, setPlacementPrompt] = useState<string>('');
+  const [objectToRemove, setObjectToRemove] = useState<DetectedObject | null>(null);
+  const [isAddProductModalOpen, setAddProductModalOpen] = useState(false);
+  const [isRedetecting, setIsRedetecting] = useState(false);
+  const [placementMarker, setPlacementMarker] = useState<{x: number, y: number} | null>(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isDebugModalOpen, setDebugModalOpen] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<{imageUrl: string | null, prompt: string | null}>({imageUrl: null, prompt: null});
+  const beforeImageRef = useRef<HTMLImageElement>(null);
+  const afterImageRef = useRef<HTMLImageElement>(null);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
   const cleanupUrls = useCallback(() => {
     if (originalImageUrl) {
@@ -323,14 +360,199 @@ const Index: React.FC = () => {
       return Array.from(unique.values());
   };
 
+  // Helper function to convert data URL to File
+  const dataUrlToFile = async (dataUrl: string, filename: string): Promise<File> => {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], filename, { type: blob.type });
+  };
+
+  const clearError = () => setError(null);
+  
+  const updateHistory = (imageUrl: string) => {
+    // For the new tabs, we need to convert the data URL to a File
+    fetch(imageUrl).then(response => response.blob()).then(blob => {
+      const newFile = new File([blob], `generated-${Date.now()}.png`, { type: blob.type });
+      const newHistory = history.slice(0, historyIndex + 1);
+      newHistory.push(newFile);
+      setHistory(newHistory);
+      setHistoryIndex(newHistory.length - 1);
+    });
+  };
+
+  const toggleAccordion = (key: keyof AccordionState) => {
+    setAccordionState(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Floor redesign handler
+  const handleFloorRedesign = async (texture: { name: string; prompt: string }) => {
+    if (!displayImageUrl || !originalImage) return;
+    clearError();
+    setAppState(AppState.Generating);
+
+    const prompt = `
+      As a photorealistic interior design AI, your task is to edit the provided image.
+      Action: Replace the existing floor with a new floor.
+      New floor texture: "${texture.prompt}".
+      Instructions: The new floor must perfectly match the room's perspective, lighting, and shadows. The final image must be indistinguishable from a real photograph. Do not alter any other part of the image.
+    `;
+    
+    const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+    setDebugInfo({ imageUrl: displayImageUrl, prompt });
+
+    try {
+        const newImageUrl = await redesignFloor(currentImageFile, prompt);
+        setDisplayImageUrl(newImageUrl);
+        updateHistory(newImageUrl);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(`Failed to redesign floor: ${errorMessage}`);
+        console.error(err);
+    } finally {
+        setAppState(AppState.Editing);
+    }
+  };
+
+  // Product file handler
+  const handleAddProductFile = (file: File) => {
+    const newProduct: Product = {
+        id: `custom-${Date.now()}`,
+        name: file.name.replace(/\.[^/.]+$/, ""),
+        imageUrl: URL.createObjectURL(file),
+        file: file,
+    };
+    setProducts(prev => [...prev, newProduct]);
+    setSelectedProduct(newProduct);
+    setPlacementPrompt('');
+    setObjectToRemove(null);
+    setAddProductModalOpen(false);
+  };
+
+  // Object removal handler
+  const handleRemoveObject = async () => {
+    if (!displayImageUrl || !originalImage || !objectToRemove) return;
+    clearError();
+    setAppState(AppState.Generating);
+
+    const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+
+    const prompt = `
+        You are an expert, hyper-realistic digital artist specializing in inpainting.
+        Your task is to completely remove an object from the provided image and realistically reconstruct the area behind it.
+
+        Object to remove: "${objectToRemove.name}".
+
+        Instructions:
+        1.  Completely erase the specified object from the scene.
+        2.  Intelligently fill the empty space by extending the surrounding textures, patterns, and surfaces (e.g., wall, floor).
+        3.  Meticulously match the existing lighting, shadows, and perspective of the room.
+        4.  The final result must be photorealistic and seamlessly blended, making it impossible to tell an object was ever there. Do not alter any other part of the image.
+    `;
+    
+    setDebugInfo({ imageUrl: displayImageUrl, prompt });
+
+    try {
+        const newImageUrl = await modifyImage(currentImageFile, prompt);
+        setDisplayImageUrl(newImageUrl);
+        updateHistory(newImageUrl);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(`Failed to remove object: ${errorMessage}`);
+        console.error(err);
+    } finally {
+        setAppState(AppState.Editing);
+        setObjectToRemove(null);
+    }
+  };
+  
+  // Product placement handler
+  const handlePlaceProduct = async (x: number, y: number) => {
+    if (!displayImageUrl || !originalImage) return;
+
+    if (!selectedProduct?.file && !placementPrompt) {
+        setError("Please select, upload, or describe an object to place in the scene.");
+        return;
+    }
+    
+    clearError();
+    setAppState(AppState.Generating);
+    
+    const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+
+    let prompt = '';
+    let productFile: File | undefined = undefined;
+
+    if (selectedProduct?.file) {
+        productFile = selectedProduct.file;
+        prompt = `
+            You are a hyper-realistic digital compositor AI.
+            Task: Realistically place the second image (a product) into the first image (the room scene).
+            Placement: The center of the product should be placed at the normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}.
+            Instructions:
+            1.  Integrate the product seamlessly.
+            2.  Adjust the product's lighting, shadows, and scale to match the scene's perspective and environment.
+            3.  The result must be photorealistic. Do not modify anything else in the original scene.
+        `;
+    } else if (placementPrompt) {
+        prompt = `
+            You are a hyper-realistic digital art director AI.
+            Task: Realistically generate and place a new object into the provided room scene image.
+            Object to generate: "${placementPrompt}".
+            Placement: The center of the new object should be placed at the normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}.
+            Instructions:
+            1.  Generate the described object from scratch.
+            2.  Integrate it seamlessly and photorealistically into the scene.
+            3.  Pay meticulous attention to the room's existing lighting, shadows, perspective, and scale to make the added object look natural.
+            4.  The result must be indistinguishable from a real photograph. Do not modify any other part of the original scene.
+        `;
+    }
+
+    setDebugInfo({ imageUrl: displayImageUrl, prompt });
+
+    try {
+        const newImageUrl = await modifyImage(currentImageFile, prompt, productFile);
+        setDisplayImageUrl(newImageUrl);
+        updateHistory(newImageUrl);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+        setError(`Failed to place product: ${errorMessage}`);
+        console.error(err);
+    } finally {
+        setAppState(AppState.Editing);
+        setSelectedProduct(null); 
+        setPlacementPrompt(''); 
+    }
+  };
+
+  const handleRedetectObjects = async () => {
+    if (!displayImageUrl || !originalImage) return;
+    clearError();
+    setIsRedetecting(true);
+    try {
+        const updatedImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'updated-scene.png');
+        const objects = await detectObjects(updatedImageFile);
+        setDetectedObjects(objects);
+        setSelectedObject(null);
+        setObjectToRemove(null);
+    } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to refresh the object list.';
+        setError(errorMessage);
+        console.error(err);
+    } finally {
+        setIsRedetecting(false);
+    }
+  };
+
   const renderEditorPanel = () => {
     const isGenerating = appState === AppState.Generating;
     
     return (
       <div className="w-full bg-zinc-50 p-6 rounded-lg shadow-sm border border-zinc-200">
-        <div className="flex border-b border-zinc-200 mb-4">
-            <button onClick={() => setActiveTab('manual')} className={`px-4 py-2 text-sm font-bold ${activeTab === 'manual' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-zinc-500'}`}>Manual Painter</button>
-            <button onClick={() => setActiveTab('themes')} className={`px-4 py-2 text-sm font-bold ${activeTab === 'themes' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-zinc-500'}`}>Design Themes</button>
+        <div className="flex border-b border-zinc-200 mb-4 overflow-x-auto">
+            <button onClick={() => setActiveTab('manual')} className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeTab === 'manual' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-zinc-500'}`}>Manual Painter</button>
+            <button onClick={() => setActiveTab('floor')} className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeTab === 'floor' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-zinc-500'}`}>Floor Redesign</button>
+            <button onClick={() => setActiveTab('themes')} className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeTab === 'themes' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-zinc-500'}`}>Design Themes</button>
+            <button onClick={() => setActiveTab('placement')} className={`px-4 py-2 text-sm font-bold whitespace-nowrap ${activeTab === 'placement' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-zinc-500'}`}>Object Placement</button>
         </div>
         
         {activeTab === 'manual' && (
@@ -437,6 +659,33 @@ const Index: React.FC = () => {
             </div>
         )}
 
+        {activeTab === 'floor' && (
+            <div className="space-y-4 animate-fade-in">
+                <h3 className="text-lg font-bold text-zinc-800 mb-1">1. Choose a Floor Texture</h3>
+                <p className="text-sm text-zinc-600 mb-4">Select a material to instantly redesign your floor.</p>
+                {floorTextures.map(cat => {
+                    const categoryKey = cat.category.split(' ')[0].toLowerCase() as keyof AccordionState;
+                    return (
+                        <div key={cat.category}>
+                            <button onClick={() => toggleAccordion(categoryKey)} className="w-full flex justify-between items-center p-3 bg-zinc-100 rounded-md hover:bg-zinc-200 transition-colors">
+                                <span className="font-semibold">{cat.category}</span>
+                                <ChevronDownIcon open={!!accordionState[categoryKey]} />
+                            </button>
+                            {accordionState[categoryKey] && (
+                                <div className="grid grid-cols-2 gap-2 p-2 animate-fade-in">
+                                    {cat.textures.map(texture => (
+                                        <button key={texture.name} onClick={() => handleFloorRedesign(texture)} disabled={appState === AppState.Generating} className="text-left p-2 rounded-md transition-colors text-sm bg-white hover:bg-zinc-50 border disabled:opacity-50">
+                                            {texture.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )
+                })}
+            </div>
+        )}
+
         {activeTab === 'themes' && (
              <div className="animate-fade-in">
                  <h3 className="text-lg font-bold text-zinc-800 mb-2">AI-Powered Design Themes</h3>
@@ -474,6 +723,138 @@ const Index: React.FC = () => {
                     </div>
                  }
              </div>
+        )}
+
+        {activeTab === 'placement' && (
+            <div className="space-y-8 animate-fade-in">
+                {/* Section 1: Remove an Object */}
+                <div>
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-semibold text-zinc-800">1. Remove an Existing Object</h3>
+                         <button onClick={handleRedetectObjects} disabled={isRedetecting} className="flex items-center space-x-2 px-3 py-1 text-sm font-semibold text-blue-600 rounded-md hover:bg-blue-50 disabled:opacity-50 disabled:cursor-wait">
+                            <RefreshIcon spinning={isRedetecting} />
+                            <span>{isRedetecting ? 'Refreshing...' : 'Refresh List'}</span>
+                        </button>
+                    </div>
+                    <p className="text-sm text-zinc-600 mt-1 mb-4">Select an object below, then click remove. Use refresh after adding/removing objects.</p>
+                    <div className="space-y-2">
+                        {detectedObjects.filter(o => o.category === 'interior').length > 0 && (
+                            <div className="border rounded-md">
+                                <button onClick={() => toggleAccordion('interior')} className="w-full flex justify-between items-center p-3 hover:bg-zinc-50 transition-colors font-semibold">
+                                    <span>Interior Elements</span>
+                                    <ChevronDownIcon open={accordionState.interior} />
+                                </button>
+                                {accordionState.interior && (
+                                    <div className="flex flex-wrap gap-2 p-3">
+                                        {detectedObjects.filter(o => o.category === 'interior').map(obj => (
+                                            <button
+                                                key={obj.name}
+                                                onClick={() => setObjectToRemove(obj)}
+                                                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${objectToRemove?.name === obj.name ? 'bg-red-600 text-white border-red-600' : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200'}`}
+                                            >
+                                                {obj.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {detectedObjects.filter(o => o.category === 'furniture').length > 0 && (
+                            <div className="border rounded-md">
+                                <button onClick={() => toggleAccordion('furniture')} className="w-full flex justify-between items-center p-3 hover:bg-zinc-50 transition-colors font-semibold">
+                                    <span>Furniture & Decor</span>
+                                    <ChevronDownIcon open={accordionState.furniture} />
+                                </button>
+                                {accordionState.furniture && (
+                                    <div className="flex flex-wrap gap-2 p-3">
+                                        {detectedObjects.filter(o => o.category === 'furniture').map(obj => (
+                                            <button
+                                                key={obj.name}
+                                                onClick={() => setObjectToRemove(obj)}
+                                                className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${objectToRemove?.name === obj.name ? 'bg-red-600 text-white border-red-600' : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200'}`}
+                                            >
+                                                {obj.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <button 
+                        onClick={handleRemoveObject}
+                        disabled={!objectToRemove || appState === AppState.Generating}
+                        className="mt-4 w-full bg-red-600 text-white font-bold py-3 rounded-md hover:bg-red-700 transition-colors disabled:bg-red-300 disabled:cursor-not-allowed"
+                    >
+                        {appState === AppState.Generating && objectToRemove ? 'Removing Object...' : 'Remove Selected Object'}
+                    </button>
+                </div>
+
+                <div className="flex items-center text-zinc-500">
+                    <div className="flex-grow border-t border-zinc-200"></div>
+                    <span className="flex-shrink mx-4 text-sm font-semibold">OR</span>
+                    <div className="flex-grow border-t border-zinc-200"></div>
+                </div>
+
+                {/* Section 2: Add a New Object */}
+                <div>
+                  <h3 className="text-lg font-semibold text-zinc-800">2. Add a New Object</h3>
+                  <div className="mt-4 space-y-6">
+                      <div>
+                          <h4 className="font-semibold text-zinc-700">Describe or Select an Object to Add</h4>
+                          <p className="text-sm text-zinc-600 mt-1 mb-4">Choose a suggestion or write your own description.</p>
+                          
+                          <div className="flex flex-wrap gap-2 mb-4">
+                              {['a potted snake plant', 'a minimalist floor lamp', 'a large abstract wall art', 'a round wooden side table', 'a plush armchair'].map(chip => (
+                                  <button
+                                      key={chip}
+                                      onClick={() => { setPlacementPrompt(chip); setSelectedProduct(null); setObjectToRemove(null); }}
+                                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors capitalize ${placementPrompt === chip ? 'bg-blue-600 text-white border-blue-600' : 'bg-zinc-100 hover:bg-zinc-200 border-zinc-200'}`}
+                                  >
+                                      {chip}
+                                  </button>
+                              ))}
+                          </div>
+
+                          <input
+                              type="text"
+                              value={placementPrompt}
+                              onChange={(e) => { setPlacementPrompt(e.target.value); setSelectedProduct(null); setObjectToRemove(null); }}
+                              placeholder="e.g., 'a small, golden-framed mirror on the wall'"
+                              className="w-full p-2 border rounded-md focus:ring-2 focus:ring-blue-500 transition"
+                          />
+                      </div>
+                      
+                      <div className="text-center text-zinc-500 text-sm">or</div>
+
+                      <div>
+                           <h4 className="font-semibold text-zinc-700">Upload Your Own Product</h4>
+                           <p className="text-sm text-zinc-600 mt-1 mb-4">Add a product from your device (PNG with a transparent background works best).</p>
+                           <button
+                              onClick={() => setAddProductModalOpen(true)}
+                              className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-colors border border-dashed border-zinc-300 shadow-sm"
+                           >
+                              Add Your Own...
+                           </button>
+                      </div>
+                  </div>
+
+                  <div className="mt-8 text-center bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg">
+                      <p className="font-semibold">
+                          {placementPrompt ? `Ready to place: "${placementPrompt}"` : 
+                           selectedProduct ? `Ready to place: "${selectedProduct.name}"` : 
+                           "Define an object to add above."}
+                      </p>
+                      {(placementPrompt || selectedProduct) && <p className="mt-1 text-sm font-bold">Click on the 'After' image to set the location.</p>}
+                  </div>
+
+                  <AddProductModal 
+                      isOpen={isAddProductModalOpen}
+                      onClose={() => setAddProductModalOpen(false)}
+                      onFileSelect={handleAddProductFile}
+                  />
+                </div>
+            </div>
         )}
       </div>
     );
