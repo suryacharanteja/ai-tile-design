@@ -110,9 +110,10 @@ export const detectFurnitureObjects = async (imageFile: File): Promise<DetectedO
     
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-image-preview',
             contents: { parts: [ {text: prompt}, imagePart ]},
             config: {
+                responseModalities: [Modality.IMAGE, Modality.TEXT],
                 responseMimeType: "application/json",
                 responseSchema: {
                     type: Type.OBJECT,
