@@ -538,21 +538,23 @@ export const placeObject = async (
     const textPart = { text: prompt };
     const parts = [baseImagePart, productImagePart, textPart];
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image-preview',
-        contents: { parts },
-        config: {
-            responseModalities: [Modality.IMAGE, Modality.TEXT],
-        },
-    });
+    try {
+        const response: GenerateContentResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image-preview',
+            contents: { parts },
+        });
 
-    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+        const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
 
-    if (imagePartFromResponse?.inlineData) {
-        const { mimeType, data } = imagePartFromResponse.inlineData;
-        return `data:${mimeType};base64,${data}`;
+        if (imagePartFromResponse?.inlineData) {
+            const { mimeType, data } = imagePartFromResponse.inlineData;
+            return `data:${mimeType};base64,${data}`;
+        }
+
+        console.error("Model response did not contain an image part.", response);
+        throw new Error("The AI model did not return an image. Please try again.");
+    } catch (error) {
+        console.error("Error in placeObject:", error);
+        throw new Error("Failed to place object. The AI could not complete the placement.");
     }
-
-    console.error("Model response did not contain an image part.", response);
-    throw new Error("The AI model did not return an image. Please try again.");
 };
