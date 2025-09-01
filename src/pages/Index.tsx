@@ -5,8 +5,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor, placeObject } from '../services/geminiService';
-import { detectFurnitureSets, DetectedFurnitureSet } from '../services/furnitureDetectionService';
-import FurnitureSetCard from '../components/FurnitureSetCard';
 import Header from '../components/Header';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
@@ -23,7 +21,7 @@ enum AppState {
   Generating,
 }
 
-type EditorTab = 'manual' | 'themes' | 'placement' | 'floor' | 'furniture';
+type EditorTab = 'manual' | 'themes' | 'placement' | 'floor';
 type AccordionState = {
   interior: boolean;
   furniture: boolean;
@@ -106,8 +104,6 @@ const Index: React.FC = () => {
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [detectedObjects, setDetectedObjects] = useState<DetectedObject[]>([]);
-  const [detectedFurnitureSets, setDetectedFurnitureSets] = useState<DetectedFurnitureSet[]>([]);
-  const [selectedFurnitureSet, setSelectedFurnitureSet] = useState<DetectedFurnitureSet | null>(null);
   const [designThemes, setDesignThemes] = useState<DesignTheme[]>([]);
   const [themesLoading, setThemesLoading] = useState(false);
   const [selectedObject, setSelectedObject] = useState<DetectedObject | null>(null);
@@ -151,14 +147,12 @@ const Index: React.FC = () => {
     setOriginalImageUrl(null);
     setDisplayImageUrl(null);
     setDetectedObjects([]);
-    setDetectedFurnitureSets([]);
     setDesignThemes([]);
     setThemesLoading(false);
     setSelectedObject(null);
-    setSelectedFurnitureSet(null);
     setHistory([]);
     setHistoryIndex(-1);
-    setActiveTab('furniture');
+    setActiveTab('manual');
     setSelectedColor('#E0E0E0');
     setIsColorPickerOpen(false);
     setCustomPrompt('');
@@ -188,14 +182,8 @@ const Index: React.FC = () => {
     setHistoryIndex(0);
 
     try {
-      // Detect both individual objects and furniture sets
-      const [objects, furnitureSets] = await Promise.all([
-        detectObjects(file),
-        detectFurnitureSets(file)
-      ]);
-      
+      const objects = await detectObjects(file);
       setDetectedObjects(objects);
-      setDetectedFurnitureSets(furnitureSets);
       setAppState(AppState.Editing);
 
       setThemesLoading(true);
@@ -418,45 +406,7 @@ ${otherObjectsContext}
         setObjectToRemove(null); // Clear selection after operation
     }
   };
-
-  const handlePlaceFurnitureSet = async (x: number, y: number) => {
-    if (!selectedFurnitureSet || !displayImageUrl || !originalImage) return;
-    
-    clearError();
-    setAppState(AppState.Generating);
-
-    try {
-        const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
-        
-        const prompt = `
-            You are a hyper-realistic interior designer AI specializing in furniture placement.
-            Task: Place the "${selectedFurnitureSet.name}" (${selectedFurnitureSet.description}) into the provided room scene image.
-            
-            Placement Instructions:
-            - Position the furniture set at normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}
-            - Scale appropriately for the room size and perspective
-            - Match the room's lighting, shadows, and photographic style
-            - Ensure realistic placement considering floor space and room layout
-            - The result must look like a professional interior photograph
-            
-            Style: Match the existing room aesthetic and maintain photorealism throughout.
-        `;
-        
-        const newImageUrl = await modifyImage(currentImageFile, prompt);
-        setDisplayImageUrl(newImageUrl);
-        updateHistory(newImageUrl);
-        setDebugInfo({ imageUrl: displayImageUrl, prompt });
-        
-    } catch (error) {
-        console.error("Failed to place furniture set:", error);
-        setErrorMessage(error instanceof Error ? error.message : 'An unknown error occurred.');
-    } finally {
-        setAppState(AppState.Editing);
-        setSelectedFurnitureSet(null);
-        setPlacementMarker(null);
-    }
-  };
-
+  
   const handlePlaceProduct = async (x: number, y: number) => {
     if (!displayImageUrl || !originalImage) return;
 
@@ -554,137 +504,6 @@ ${otherObjectsContext}
 
   const toggleAccordion = (key: keyof AccordionState) => {
     setAccordionState(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const renderFurnitureSets = () => {
-    const isObjectSelected = selectedFurnitureSet !== null;
-    
-    return (
-      <div className="space-y-6">
-        {/* Enhanced Step-by-Step Progress Indicator */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              {/* Step 1 */}
-              <div className="flex items-center space-x-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                  isObjectSelected ? 'bg-blue-600 text-white' : 'bg-blue-100 border-2 border-blue-300 text-blue-600'
-                }`}>
-                  1
-                </div>
-                <span className={`text-sm font-semibold ${isObjectSelected ? 'text-blue-600' : 'text-zinc-500'}`}>
-                  Object Selected
-                </span>
-              </div>
-              
-              {/* Connector */}
-              <div className="w-8 h-px bg-zinc-300"></div>
-              
-              {/* Step 2 */}
-              <div className="flex items-center space-x-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-colors ${
-                  isObjectSelected ? 'bg-blue-600 text-white animate-pulse' : 'bg-zinc-100 border-2 border-zinc-300 text-zinc-400'
-                }`}>
-                  2
-                </div>
-                <span className={`text-sm font-semibold ${isObjectSelected ? 'text-blue-600' : 'text-zinc-400'}`}>
-                  Click to Place
-                </span>
-              </div>
-            </div>
-            
-            {/* Next Step Indicator */}
-            {isObjectSelected && (
-              <div className="text-right">
-                <p className="text-xs text-zinc-500 mb-1">Next Step</p>
-                <div className="flex items-center space-x-2 text-blue-600">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                  </svg>
-                  <span className="text-sm font-medium">Click on image →</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Selected Object Display */}
-          {isObjectSelected && selectedFurnitureSet && (
-            <div className="mt-4 bg-white rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-zinc-800">{selectedFurnitureSet.name}</p>
-                  <p className="text-sm text-zinc-600">{selectedFurnitureSet.description}</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Furniture Sets Grid */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-zinc-800">
-              {isObjectSelected ? 'Selected Furniture Set' : 'Detected Furniture & Decor'}
-            </h3>
-            <span className="text-sm text-zinc-500 bg-zinc-100 px-2 py-1 rounded-full">
-              {detectedFurnitureSets.length} sets found
-            </span>
-          </div>
-          
-          {detectedFurnitureSets.length === 0 ? (
-            <div className="text-center py-8 bg-zinc-50 rounded-lg border border-dashed border-zinc-200">
-              <svg className="w-12 h-12 text-zinc-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-              <p className="text-zinc-600 font-medium">No furniture sets detected</p>
-              <p className="text-sm text-zinc-500 mt-1">Try uploading an image with furniture or decor items</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {detectedFurnitureSets.map((furnitureSet, index) => (
-                <FurnitureSetCard
-                  key={`${furnitureSet.name}-${index}`}
-                  furnitureSet={furnitureSet}
-                  isSelected={selectedFurnitureSet?.name === furnitureSet.name}
-                  onClick={() => {
-                    if (selectedFurnitureSet?.name === furnitureSet.name) {
-                      setSelectedFurnitureSet(null);
-                    } else {
-                      setSelectedFurnitureSet(furnitureSet);
-                    }
-                  }}
-                  imageUrl={displayImageUrl}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Instructions */}
-        {!isObjectSelected && detectedFurnitureSets.length > 0 && (
-          <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mt-0.5">
-                <svg className="w-3 h-3 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-zinc-700 mb-1">How to use:</p>
-                <p className="text-sm text-zinc-600">
-                  Select a furniture set or decor collection from above, then click on the "After" image to place it in your room with precision.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   const renderManualPainter = () => {
@@ -1111,33 +930,6 @@ ${otherObjectsContext}
     });
     
     const handleAfterImageClick = (event: React.MouseEvent<HTMLDivElement>) => {
-        // Handle furniture set placement for furniture tab
-        if (activeTab === 'furniture' && selectedFurnitureSet && afterImageRef.current) {
-            const imageRect = afterImageRef.current.getBoundingClientRect();
-            const containerRect = event.currentTarget.getBoundingClientRect();
-
-            const isClickInsideImage = 
-                event.clientX >= imageRect.left &&
-                event.clientX <= imageRect.right &&
-                event.clientY >= imageRect.top &&
-                event.clientY <= imageRect.bottom;
-
-            if (!isClickInsideImage) return;
-
-            const x = (event.clientX - imageRect.left) / imageRect.width;
-            const y = (event.clientY - imageRect.top) / imageRect.height;
-            
-            // Set placement marker for visual feedback
-            setPlacementMarker({ 
-                x: event.clientX - containerRect.left, 
-                y: event.clientY - containerRect.top 
-            });
-            
-            handlePlaceFurnitureSet(x, y);
-            return;
-        }
-        
-        // Existing placement logic for placement tab
         if (activeTab !== 'placement' || (!selectedProduct && !placementPrompt) || !afterImageRef.current) {
             return;
         }
@@ -1164,8 +956,7 @@ ${otherObjectsContext}
     };
 
     const renderImagePanel = (title: string, imageUrl: string | null, ref: React.RefObject<HTMLImageElement>, isAfter = false) => {
-        const isPlacementMode = (isAfter && activeTab === 'placement' && (selectedProduct || placementPrompt)) || 
-                             (isAfter && activeTab === 'furniture' && selectedFurnitureSet);
+        const isPlacementMode = isAfter && activeTab === 'placement' && (selectedProduct || placementPrompt);
         const isRemovalMode = isAfter && activeTab === 'placement' && objectToRemove;
         
         return (
@@ -1175,12 +966,7 @@ ${otherObjectsContext}
                 {isPlacementMode && (
                     <div className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
                         <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-                        <span>
-                            {activeTab === 'furniture' && selectedFurnitureSet 
-                                ? 'Click to place furniture set' 
-                                : 'Click to place object'
-                            }
-                        </span>
+                        <span>Click to place object</span>
                     </div>
                 )}
                 {isRemovalMode && (
@@ -1297,12 +1083,7 @@ ${otherObjectsContext}
                     <div className="absolute top-2 left-2 bg-blue-600/90 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs font-medium pointer-events-none backdrop-blur-sm">
                         <div className="flex items-center space-x-2">
                             <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                            <span>
-                                {activeTab === 'furniture' && selectedFurnitureSet 
-                                    ? 'Click anywhere to place your furniture set' 
-                                    : 'Click anywhere to place your object'
-                                }
-                            </span>
+                            <span>Click anywhere to place your object</span>
                         </div>
                     </div>
                 )}
@@ -1312,7 +1093,6 @@ ${otherObjectsContext}
     };
 
     const TABS: { id: EditorTab; label: string }[] = [
-      { id: 'furniture', label: 'Upload Your Product' },
       { id: 'manual', label: 'Manual Painter' },
       { id: 'floor', label: 'Floor Redesign' },
       { id: 'themes', label: 'Design Themes' },
@@ -1367,7 +1147,6 @@ ${otherObjectsContext}
                 {appState === AppState.Generating && <div className="text-center py-8"><Spinner /><p className="mt-2">Generating your new image...</p></div>}
                 
                 <div className={appState === AppState.Generating ? 'hidden' : ''}>
-                    {activeTab === 'furniture' && renderFurnitureSets()}
                     {activeTab === 'manual' && renderManualPainter()}
                     {activeTab === 'floor' && renderFloorRedesign()}
                     {activeTab === 'themes' && renderDesignThemes()}
