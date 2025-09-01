@@ -5,6 +5,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor, placeObject } from '../services/geminiService';
+import { detectFurnitureSets, FurnitureSet } from '../services/furnitureDetectionService';
 import Header from '../components/Header';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
@@ -13,6 +14,7 @@ import { Product } from '../types';
 import AddProductModal from '../components/AddProductModal';
 import PreviewModal from '../components/PreviewModal';
 import ColorPickerPopover from '../components/ColorPickerPopover';
+import FurnitureSetCard from '../components/FurnitureSetCard';
 
 enum AppState {
   Initial,
@@ -135,6 +137,10 @@ const Index: React.FC = () => {
   const [objectToRemove, setObjectToRemove] = useState<DetectedObject | null>(null);
   const [placementMarker, setPlacementMarker] = useState<{ x: number; y: number } | null>(null);
   const [isRedetecting, setIsRedetecting] = useState(false);
+  const [detectedFurnitureSets, setDetectedFurnitureSets] = useState<FurnitureSet[]>([]);
+  const [selectedFurnitureSet, setSelectedFurnitureSet] = useState<FurnitureSet | null>(null);
+  const [isDetectingFurniture, setIsDetectingFurniture] = useState(false);
+  const [uploadStep, setUploadStep] = useState<'upload' | 'detect' | 'select' | 'place'>('upload');
 
   const beforeImageRef = useRef<HTMLImageElement>(null);
   const afterImageRef = useRef<HTMLImageElement>(null);
@@ -169,6 +175,10 @@ const Index: React.FC = () => {
       wood: true, marble: false, granite: false, tiles: false, other: false,
     });
     setActiveThemeIndex(null);
+    setDetectedFurnitureSets([]);
+    setSelectedFurnitureSet(null);
+    setIsDetectingFurniture(false);
+    setUploadStep('upload');
   }, []);
 
   const handleFileSelect = async (file: File) => {
@@ -358,18 +368,37 @@ ${otherObjectsContext}
       }
   };
 
-  const handleAddProductFile = (file: File) => {
-    const newProduct: Product = {
-        id: `custom-${Date.now()}`,
-        name: file.name.replace(/\.[^/.]+$/, ""),
-        imageUrl: URL.createObjectURL(file),
-        file: file,
-    };
-    setProducts(prev => [...prev, newProduct]);
-    setSelectedProduct(newProduct);
-    setPlacementPrompt('');
-    setObjectToRemove(null);
+  const handleProductFileSelect = async (file: File) => {
+    setIsDetectingFurniture(true);
+    setUploadStep('detect');
+    
+    try {
+      const furnitureSets = await detectFurnitureSets(file);
+      setDetectedFurnitureSets(furnitureSets);
+      setUploadStep('select');
+    } catch (error) {
+      console.error("Failed to detect furniture:", error);
+      setErrorMessage(error instanceof Error ? error.message : "Failed to analyze furniture image");
+      setUploadStep('upload');
+    } finally {
+      setIsDetectingFurniture(false);
+    }
+    
     setAddProductModalOpen(false);
+  };
+
+  const handleFurnitureSetSelect = (furnitureSet: FurnitureSet) => {
+    setSelectedFurnitureSet(furnitureSet);
+    setUploadStep('place');
+    
+    // Convert furniture set to product for compatibility with existing placement logic
+    const product: Product = {
+      id: furnitureSet.id,
+      name: furnitureSet.name,
+      imageUrl: furnitureSet.imageUrl,
+    };
+    setSelectedProduct(product);
+    setPlacementPrompt(''); // Clear text prompt when furniture is selected
   };
 
   const handleRemoveObject = async () => {
@@ -879,26 +908,132 @@ ${otherObjectsContext}
               <div className="text-center text-zinc-500 text-sm">or</div>
 
               <div>
-                   <h4 className="font-semibold text-zinc-700">Upload Your Own Product</h4>
-                   <p className="text-sm text-zinc-600 mt-1 mb-4">Add a product from your device (PNG with a transparent background works best).</p>
-                   <button
-                      onClick={() => setAddProductModalOpen(true)}
-                      className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-all duration-200 border border-dashed border-zinc-300 shadow-sm hover:shadow-md hover:scale-102"
-                   >
-                      <div className="flex items-center justify-center space-x-2">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        <span>Add Your Own...</span>
+                <h4 className="font-semibold text-zinc-700">Upload Your Own Product</h4>
+                <p className="text-sm text-zinc-600 mt-1 mb-4">Upload furniture images and our AI will detect complete furniture sets thinking like an interior designer.</p>
+                
+                {/* Step Indicator */}
+                <div className="flex items-center justify-center space-x-4 mb-6 p-4 bg-gray-50 rounded-lg">
+                  <div className={`flex items-center space-x-2 ${uploadStep === 'upload' || uploadStep === 'detect' ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${uploadStep === 'upload' || uploadStep === 'detect' ? 'bg-blue-100' : 'bg-gray-200'}`}>1</div>
+                    <span className="text-sm">Upload Image</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-gray-300"></div>
+                  <div className={`flex items-center space-x-2 ${uploadStep === 'select' ? 'text-blue-600 font-semibold' : uploadStep === 'place' ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${uploadStep === 'select' ? 'bg-blue-100' : uploadStep === 'place' ? 'bg-green-100' : 'bg-gray-200'}`}>2</div>
+                    <span className="text-sm">Select Product</span>
+                  </div>
+                  <div className="w-8 h-0.5 bg-gray-300"></div>
+                  <div className={`flex items-center space-x-2 ${uploadStep === 'place' ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${uploadStep === 'place' ? 'bg-blue-100' : 'bg-gray-200'}`}>3</div>
+                    <span className="text-sm">Place in Room</span>
+                  </div>
+                </div>
+
+                {/* Upload Phase */}
+                {uploadStep === 'upload' && (
+                  <button
+                    onClick={() => setAddProductModalOpen(true)}
+                    className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-all duration-200 border border-dashed border-zinc-300 shadow-sm hover:shadow-md hover:scale-102"
+                  >
+                    <div className="flex items-center justify-center space-x-2">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                      <span>Upload Furniture Image</span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Detecting Phase */}
+                {uploadStep === 'detect' && isDetectingFurniture && (
+                  <div className="text-center py-8">
+                    <Spinner />
+                    <p className="mt-4 text-sm text-gray-600">Analyzing furniture sets like an interior designer...</p>
+                  </div>
+                )}
+
+                {/* Select Phase */}
+                {uploadStep === 'select' && detectedFurnitureSets.length > 0 && (
+                  <div>
+                    <h5 className="font-medium text-gray-800 mb-3">Select a Product:</h5>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto">
+                      {detectedFurnitureSets.map((furnitureSet) => (
+                        <FurnitureSetCard
+                          key={furnitureSet.id}
+                          furnitureSet={furnitureSet}
+                          isSelected={selectedFurnitureSet?.id === furnitureSet.id}
+                          onClick={() => handleFurnitureSetSelect(furnitureSet)}
+                        />
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setUploadStep('upload');
+                        setDetectedFurnitureSets([]);
+                        setSelectedFurnitureSet(null);
+                      }}
+                      className="mt-4 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      ← Upload Different Image
+                    </button>
+                  </div>
+                )}
+
+                {/* Place Phase */}
+                {uploadStep === 'place' && selectedFurnitureSet && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className="w-12 h-12 bg-white rounded-lg overflow-hidden shadow-sm">
+                        <img src={selectedFurnitureSet.imageUrl} alt={selectedFurnitureSet.name} className="w-full h-full object-cover" />
                       </div>
-                   </button>
+                      <div>
+                        <h6 className="font-semibold text-gray-800">{selectedFurnitureSet.name}</h6>
+                        <p className="text-xs text-gray-600">{selectedFurnitureSet.description}</p>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="inline-flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-medium animate-pulse">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                        </svg>
+                        <span>CLICK ROOM IMAGE TO PLACE!</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setUploadStep('select');
+                        setSelectedFurnitureSet(null);
+                        setSelectedProduct(null);
+                      }}
+                      className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      ← Choose Different Product
+                    </button>
+                  </div>
+                )}
+
+                {/* No furniture detected */}
+                {uploadStep === 'select' && detectedFurnitureSets.length === 0 && !isDetectingFurniture && (
+                  <div className="text-center py-6 border border-gray-200 rounded-lg">
+                    <p className="text-gray-600 mb-3">No furniture sets detected in this image.</p>
+                    <button
+                      onClick={() => {
+                        setUploadStep('upload');
+                        setDetectedFurnitureSets([]);
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Try Different Image
+                    </button>
+                  </div>
+                )}
               </div>
           </div>
 
           <AddProductModal 
               isOpen={isAddProductModalOpen}
               onClose={() => setAddProductModalOpen(false)}
-              onFileSelect={handleAddProductFile}
+              onFileSelect={handleProductFileSelect}
           />
         </div>
 
@@ -910,6 +1045,8 @@ ${otherObjectsContext}
                 setPlacementPrompt('');
                 setSelectedProduct(null);
                 setObjectToRemove(null);
+                setSelectedFurnitureSet(null);
+                setUploadStep('upload');
               }}
               className="px-4 py-2 text-sm text-zinc-600 hover:text-zinc-800 underline transition-colors"
             >
