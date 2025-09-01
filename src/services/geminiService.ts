@@ -112,47 +112,20 @@ export const detectFurnitureObjects = async (imageFile: File): Promise<DetectedO
         const response: GenerateContentResponse = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image-preview',
             contents: { parts: [ {text: prompt}, imagePart ]},
-            config: {
-                responseModalities: [Modality.IMAGE, Modality.TEXT],
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        objects: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    name: { type: Type.STRING },
-                                    is_primary: { type: Type.BOOLEAN },
-                                    category: { type: Type.STRING },
-                                    bounding_box: {
-                                        type: Type.OBJECT,
-                                        properties: {
-                                            x_min: { type: Type.NUMBER },
-                                            y_min: { type: Type.NUMBER },
-                                            x_max: { type: Type.NUMBER },
-                                            y_max: { type: Type.NUMBER },
-                                        },
-                                        required: ["x_min", "y_min", "x_max", "y_max"],
-                                    }
-                                },
-                                required: ["name", "is_primary", "bounding_box", "category"]
-                            }
-                        }
-                    },
-                    required: ["objects"]
-                },
-            },
         });
 
-        const jsonString = response.text.trim();
-        const result = JSON.parse(jsonString);
-        if (!result.objects || !Array.isArray(result.objects)) {
-            console.warn("Model returned unexpected format for objects, falling back to empty array.", result);
+        const jsonString = response.text?.trim() || '';
+        
+        // Sometimes the model might include markdown backticks around the JSON
+        const cleanedJsonString = jsonString.replace(/^```json\n|\n```$/g, '').trim();
+
+        const parsedResult = JSON.parse(cleanedJsonString);
+        
+        if (!parsedResult.objects || !Array.isArray(parsedResult.objects)) {
+            console.warn("Model returned unexpected format for objects, falling back to empty array.", parsedResult);
             return [];
         }
-        return result.objects;
+        return parsedResult.objects;
     } catch (error) {
         console.error("Error detecting furniture objects:", error);
         throw new Error("Failed to parse the furniture. The AI could not identify furniture pieces.");
