@@ -388,18 +388,29 @@ ${otherObjectsContext}
     setAddProductModalOpen(false);
   };
 
-  const handleFurnitureSetSelect = (furnitureSet: FurnitureSet) => {
+  const handleFurnitureSetSelect = async (furnitureSet: FurnitureSet) => {
     setSelectedFurnitureSet(furnitureSet);
     setUploadStep('place');
     
-    // Convert furniture set to product for compatibility with existing placement logic
-    const product: Product = {
-      id: furnitureSet.id,
-      name: furnitureSet.name,
-      imageUrl: furnitureSet.imageUrl,
-    };
-    setSelectedProduct(product);
-    setPlacementPrompt(''); // Clear text prompt when furniture is selected
+    // Convert the image URL back to a File object for placement
+    try {
+      const response = await fetch(furnitureSet.imageUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `${furnitureSet.name}.png`, { type: blob.type });
+      
+      // Convert furniture set to product for compatibility with existing placement logic
+      const product: Product = {
+        id: furnitureSet.id,
+        name: furnitureSet.name,
+        imageUrl: furnitureSet.imageUrl,
+        file: file, // Add the file property for placement logic
+      };
+      setSelectedProduct(product);
+      setPlacementPrompt(''); // Clear text prompt when furniture is selected
+    } catch (error) {
+      console.error('Failed to convert furniture set image to file:', error);
+      setErrorMessage('Failed to prepare furniture for placement');
+    }
   };
 
   const handleRemoveObject = async () => {
@@ -440,7 +451,7 @@ ${otherObjectsContext}
   const handlePlaceProduct = async (x: number, y: number) => {
     if (!displayImageUrl || !originalImage) return;
 
-    if (!selectedProduct?.file && !placementPrompt) {
+    if (!selectedProduct?.file && !placementPrompt && !selectedProduct?.imageUrl) {
         setErrorMessage("Please select, upload, or describe an object to place in the scene.");
         return;
     }
@@ -462,6 +473,27 @@ ${otherObjectsContext}
                 objectToRemove || undefined
             );
             setDebugInfo({ imageUrl: displayImageUrl, prompt: `Placed object at coordinates (${x.toFixed(3)}, ${y.toFixed(3)})` });
+        } else if (selectedProduct?.imageUrl) {
+            // Handle furniture sets that only have imageUrl (fallback to modifyImage)
+            const prompt = `
+                You are a hyper-realistic digital art director AI.
+                Task: Realistically place the furniture item shown in the second image into the room scene from the first image.
+                Furniture: "${selectedProduct.name}".
+                Placement: The center of the furniture should be placed at the normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}.
+                Instructions:
+                1. Place the furniture item seamlessly and photorealistically into the scene.
+                2. Ensure proper scale, perspective, lighting, and shadows to make it look natural.
+                3. The result must be indistinguishable from a real photograph.
+                4. Do not modify any other part of the original scene.
+            `;
+            
+            // Convert imageUrl to File for modifyImage
+            const furnitureResponse = await fetch(selectedProduct.imageUrl);
+            const furnitureBlob = await furnitureResponse.blob();
+            const furnitureFile = new File([furnitureBlob], `${selectedProduct.name}.png`, { type: furnitureBlob.type });
+            
+            newImageUrl = await modifyImage(currentImageFile, prompt, furnitureFile);
+            setDebugInfo({ imageUrl: displayImageUrl, prompt });
         } else if (placementPrompt) {
             // For text-based object generation, still use modifyImage with enhanced prompt
             const prompt = `
