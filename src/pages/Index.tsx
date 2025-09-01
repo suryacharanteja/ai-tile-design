@@ -15,6 +15,7 @@ import AddProductModal from '../components/AddProductModal';
 import PreviewModal from '../components/PreviewModal';
 import ColorPickerPopover from '../components/ColorPickerPopover';
 import FurnitureSetCard from '../components/FurnitureSetCard';
+import { Textarea } from '../components/ui/textarea';
 
 enum AppState {
   Initial,
@@ -591,11 +592,11 @@ ${otherObjectsContext}
                   <div>
                       <h3 className="text-lg font-semibold text-zinc-800">Or Use a Custom Prompt</h3>
                       <p className="text-sm text-zinc-600 mt-1 mb-4">Get creative with a custom prompt.</p>
-                      <textarea
+                      <Textarea
                           value={customPrompt}
                           onChange={(e) => { setCustomPrompt(e.target.value); setSelectedObject(null); }}
                           placeholder="e.g., 'Make the floor a light oak wood', 'Add a window on the back wall'"
-                          className="w-full p-2 border rounded-md h-36 focus:ring-2 focus:ring-blue-500 transition"
+                          className="w-full h-36 focus:ring-2 focus:ring-blue-500 transition"
                       />
                   </div>
               </div>
