@@ -17,6 +17,7 @@ export interface DetectedObject {
     name: string;
     bounding_box: BoundingBox;
     is_primary: boolean;
+    category: 'interior' | 'furniture';
 }
 
 export interface DesignTheme {
@@ -62,19 +63,46 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
     const imagePart = await fileToPart(imageFile);
 
     const prompt = `
-        Analyze the provided image of a room. Your task is to identify and list the main distinct objects and surfaces suitable for color changes. Be specific and granular; for example, if there are multiple walls visible, label them as "left wall", "back wall", "accent wall", etc.
+        You are an expert computer vision model specializing in semantic segmentation for interior design applications. Your task is to act as a meticulous scene parser. Analyze the provided room image to identify and delineate every individual paintable surface and distinct object. The primary goal is to enable a user to select any single element (like a wall, a window frame, or a piece of furniture) for modification without affecting adjacent or overlapping items.
 
-        For each object you identify, provide the following:
-        1.  'name': A clear, specific name (e.g., "left wall", "sofa", "hardwood floor", "window frame").
-        2.  'is_primary': A boolean value. Set it to 'true' for the most prominent or largest single object suitable for a color change (like the main wall), and 'false' for all others. Only one object should be primary.
-        3.  'bounding_box': An object containing the normalized coordinates of the object's bounding box. The coordinates (x_min, y_min, x_max, y_max) should be floats between 0.0 and 1.0, where (0,0) is the top-left corner.
+        **Core Directive: Precise Segmentation of Composite Surfaces**
 
-        Return the response as a JSON object with a single key "objects" containing an array of these structured objects.
+        Your most critical function is to deconstruct composite surfaces into their constituent parts. Do not group elements.
+
+        1.  **Wall and Window Separation:** A wall that contains a window must be identified as **two separate and distinct objects**:
+            *   One object for the 'wall' itself.
+            *   A second, separate object for the 'window'.
+            *   **NEVER** label them as a single 'wall with window'.
+
+        2.  **Wall and Fixture Separation:** Similarly, a wall with a picture frame, a light switch, or a mirror must be segmented into:
+            *   The 'wall'.
+            *   The 'picture frame' (as its own object).
+            *   The 'light switch' (as its own object).
+            *   The 'mirror' (as its own object).
+
+        **Bounding Box Logic:**
+        - The bounding box for a larger surface (like a wall) must encompass the entire visible area of that surface.
+        - The bounding boxes for smaller objects on that surface (like a window or a picture frame) will naturally be located *inside* the bounding box of the larger surface. This is expected and correct. Your segmentation logic must be precise enough to differentiate them.
+
+        **Categorization Rules:**
+
+        - **'interior'**: This category is exclusively for major, non-movable architectural elements. This includes all "Walls", the "Floor", the "Ceiling", "Windows", "Doors", and fixed trim like "baseboards" or "crown molding".
+        - **'furniture'**: This category is for all other items. This includes furniture (sofa, table), decor (rug, wall art, mirror), and fixtures (lamps, light switches).
+
+        **Output Requirements:**
+
+        For each identified item, provide the following in a JSON object:
+        1.  **'name'**: A specific, descriptive name. Use location for clarity (e.g., "Back wall", "Window on back wall", "Left baseboard").
+        2.  **'is_primary'**: \`true\` for the single most dominant object in each category (e.g., the largest wall, the main sofa), otherwise \`false\`.
+        3.  **'category'**: Strictly 'interior' or 'furniture' based on the rules above.
+        4.  **'bounding_box'**: A precise, normalized bounding box \`{x_min, y_min, x_max, y_max}\` for each object.
+
+        Your final output must be a single JSON object with the key "objects", containing an array of these structured descriptions. The accuracy of your segmentation is paramount.
     `;
     
     try {
         const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash', // Using flash for this task as it is efficient and cheaper
             contents: { parts: [ {text: prompt}, imagePart ]},
             config: {
                 responseMimeType: "application/json",
@@ -88,6 +116,7 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
                                 properties: {
                                     name: { type: Type.STRING },
                                     is_primary: { type: Type.BOOLEAN },
+                                    category: { type: Type.STRING },
                                     bounding_box: {
                                         type: Type.OBJECT,
                                         properties: {
@@ -99,7 +128,7 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
                                         required: ["x_min", "y_min", "x_max", "y_max"],
                                     }
                                 },
-                                required: ["name", "is_primary", "bounding_box"]
+                                required: ["name", "is_primary", "bounding_box", "category"]
                             }
                         }
                     },
@@ -192,6 +221,95 @@ export const getDesignThemes = async (imageFile: File, objects: DetectedObject[]
     }
 };
 
+
+/**
+ * Modifies an image based on a custom prompt (e.g., changing colors, adding/removing objects).
+ * Can optionally take a second image (e.g., a product) to be used in the modification.
+ * @param baseImageFile The original scene image file.
+ * @param prompt The detailed instructions for the AI.
+ * @param productImageFile An optional second image file (e.g., a product to add).
+ * @returns A promise that resolves to the data URL of the generated image.
+ */
+export const modifyImage = async (
+  baseImageFile: File,
+  prompt: string,
+  productImageFile?: File | null
+): Promise<string> => {
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
+    }
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    
+    const baseImagePart = await fileToPart(baseImageFile);
+    const textPart = { text: prompt };
+
+    // FIX: Explicitly type `parts` to allow both image and text content. This resolves a TypeScript error
+    // where the array was inferred to only contain image parts, preventing the text part from being added.
+    const parts: ({ inlineData: { mimeType: string; data: string; } } | { text: string })[] = [baseImagePart];
+    if (productImageFile) {
+        const productImagePart = await fileToPart(productImageFile);
+        // The prompt should be structured to know which image is which.
+        // The convention established in App.tsx is [scene, product, text].
+        parts.push(productImagePart);
+    }
+    parts.push(textPart);
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+
+    if (imagePartFromResponse?.inlineData) {
+        const { mimeType, data } = imagePartFromResponse.inlineData;
+        return `data:${mimeType};base64,${data}`;
+    }
+
+    console.error("Model response did not contain an image part.", response);
+    throw new Error("The AI model did not return an image. Please try again.");
+};
+
+/**
+ * Redesigns a floor in an image using a more powerful model for better results.
+ * @param baseImageFile The original scene image file.
+ * @param prompt The detailed instructions for the AI.
+ * @returns A promise that resolves to the data URL of the generated image.
+ */
+export const redesignFloor = async (
+  baseImageFile: File,
+  prompt: string,
+): Promise<string> => {
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
+    }
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    
+    const baseImagePart = await fileToPart(baseImageFile);
+    const textPart = { text: prompt };
+    const parts = [baseImagePart, textPart];
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+
+    if (imagePartFromResponse?.inlineData) {
+        const { mimeType, data } = imagePartFromResponse.inlineData;
+        return `data:${mimeType};base64,${data}`;
+    }
+
+    console.error("Model response did not contain an image part.", response);
+    throw new Error("The AI model did not return an image. Please try again.");
+};
 
 /**
  * Changes the color of an object in an image or applies a custom prompt.
