@@ -12,6 +12,7 @@ import AddProductModal from '../components/AddProductModal';
 import DebugModal from '../components/DebugModal';
 import PreviewModal from '../components/PreviewModal';
 import ColorPickerPopover from '../components/ColorPickerPopover';
+import ProductSelector from '../components/ProductSelector';
 import { Product, FloorCategory, floorTextures, standardPalettes } from '../types';
 
 enum AppState {
@@ -87,7 +88,33 @@ const Index: React.FC = () => {
     modern: false,
     carpet: false,
   });
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([
+    {
+      id: 'chair-modern',
+      name: 'Modern Chair',
+      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=300&fit=crop&crop=center',
+    },
+    {
+      id: 'plant-snake',
+      name: 'Snake Plant',
+      imageUrl: 'https://images.unsplash.com/photo-1581595220892-b0739db3ba8c?w=300&h=300&fit=crop&crop=center',
+    },
+    {
+      id: 'lamp-floor',
+      name: 'Floor Lamp',
+      imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop&crop=center',
+    },
+    {
+      id: 'art-abstract',
+      name: 'Abstract Art',
+      imageUrl: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop&crop=center',
+    },
+    {
+      id: 'table-side',
+      name: 'Side Table',
+      imageUrl: 'https://images.unsplash.com/photo-1506439773649-6e0eb8cfb237?w=300&h=300&fit=crop&crop=center',
+    }
+  ]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [placementPrompt, setPlacementPrompt] = useState<string>('');
   const [objectToRemove, setObjectToRemove] = useState<DetectedObject | null>(null);
@@ -828,16 +855,29 @@ const Index: React.FC = () => {
                       
                       <div className="text-center text-zinc-500 text-sm">or</div>
 
-                      <div>
-                           <h4 className="font-semibold text-zinc-700">Upload Your Own Product</h4>
-                           <p className="text-sm text-zinc-600 mt-1 mb-4">Add a product from your device (PNG with a transparent background works best).</p>
-                           <button
-                              onClick={() => setAddProductModalOpen(true)}
-                              className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-colors border border-dashed border-zinc-300 shadow-sm"
-                           >
-                              Add Your Own...
-                           </button>
-                      </div>
+                       <div>
+                            <h4 className="font-semibold text-zinc-700">Select from Product Library</h4>
+                            <p className="text-sm text-zinc-600 mt-1 mb-4">Choose from our curated collection or upload your own.</p>
+                            {products.length > 0 ? (
+                                <ProductSelector
+                                    products={products}
+                                    selectedProductId={selectedProduct?.id || null}
+                                    onSelect={(product) => {
+                                        setSelectedProduct(product);
+                                        setPlacementPrompt('');
+                                        setObjectToRemove(null);
+                                    }}
+                                    onAddOwnProductClick={() => setAddProductModalOpen(true)}
+                                />
+                            ) : (
+                                <button
+                                   onClick={() => setAddProductModalOpen(true)}
+                                   className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-colors border border-dashed border-zinc-300 shadow-sm"
+                                >
+                                   Add Your First Product...
+                                </button>
+                            )}
+                       </div>
                   </div>
 
                   <div className="mt-8 text-center bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg">
