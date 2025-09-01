@@ -358,18 +358,86 @@ ${otherObjectsContext}
       }
   };
 
-  const handleAddProductFile = (file: File) => {
-    const newProduct: Product = {
-        id: `custom-${Date.now()}`,
-        name: file.name.replace(/\.[^/.]+$/, ""),
-        imageUrl: URL.createObjectURL(file),
-        file: file,
+  const [uploadedProductObjects, setUploadedProductObjects] = useState<DetectedObject[]>([]);
+  const [isDetectingProductObjects, setIsDetectingProductObjects] = useState(false);
+  const [uploadedProductUrl, setUploadedProductUrl] = useState<string | null>(null);
+
+  const handleAddProductFile = async (file: File) => {
+    try {
+        setIsDetectingProductObjects(true);
+        setAddProductModalOpen(false);
+        
+        const imageUrl = URL.createObjectURL(file);
+        setUploadedProductUrl(imageUrl);
+        
+        // Detect objects in the uploaded product image
+        const detectedObjects = await detectObjects(file);
+        
+        // Filter for furniture and important objects
+        const importantObjects = detectedObjects.filter(obj => 
+            obj.category === 'furniture' || 
+            ['sofa', 'chair', 'table', 'bed', 'tv', 'television', 'fridge', 'refrigerator', 
+             'lamp', 'mirror', 'cabinet', 'shelf', 'desk', 'couch', 'ottoman', 'dresser',
+             'nightstand', 'bookshelf', 'plant', 'vase', 'artwork', 'picture', 'frame'].some(keyword => 
+                obj.name.toLowerCase().includes(keyword)
+            )
+        );
+        
+        setUploadedProductObjects(importantObjects);
+        setPlacementPrompt('');
+        setSelectedProduct(null);
+        setObjectToRemove(null);
+    } catch (error) {
+        console.error("Failed to detect objects in product image:", error);
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to analyze product image');
+        setUploadedProductUrl(null);
+        setUploadedProductObjects([]);
+    } finally {
+        setIsDetectingProductObjects(false);
+    }
+  };
+
+  const handleSelectDetectedObject = (object: DetectedObject, imageUrl: string) => {
+    // Create a cropped image of the selected object
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    
+    img.onload = () => {
+        const { x_min, y_min, x_max, y_max } = object.bounding_box;
+        const objWidth = (x_max - x_min) * img.width;
+        const objHeight = (y_max - y_min) * img.height;
+        
+        canvas.width = objWidth;
+        canvas.height = objHeight;
+        
+        ctx?.drawImage(
+            img,
+            x_min * img.width, y_min * img.height, objWidth, objHeight,
+            0, 0, objWidth, objHeight
+        );
+        
+        canvas.toBlob((blob) => {
+            if (blob) {
+                const croppedImageUrl = URL.createObjectURL(blob);
+                const newProduct: Product = {
+                    id: `cropped-${Date.now()}`,
+                    name: object.name,
+                    imageUrl: croppedImageUrl,
+                    file: new File([blob], `${object.name}.png`, { type: 'image/png' }),
+                };
+                
+                setProducts(prev => [...prev, newProduct]);
+                setSelectedProduct(newProduct);
+                setUploadedProductObjects([]);
+                setUploadedProductUrl(null);
+                setPlacementPrompt('');
+                setObjectToRemove(null);
+            }
+        }, 'image/png');
     };
-    setProducts(prev => [...prev, newProduct]);
-    setSelectedProduct(newProduct);
-    setPlacementPrompt('');
-    setObjectToRemove(null);
-    setAddProductModalOpen(false);
+    
+    img.src = imageUrl;
   };
 
   const handleRemoveObject = async () => {
@@ -880,18 +948,101 @@ ${otherObjectsContext}
 
               <div>
                    <h4 className="font-semibold text-zinc-700">Upload Your Own Product</h4>
-                   <p className="text-sm text-zinc-600 mt-1 mb-4">Add a product from your device (PNG with a transparent background works best).</p>
-                   <button
-                      onClick={() => setAddProductModalOpen(true)}
-                      className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-all duration-200 border border-dashed border-zinc-300 shadow-sm hover:shadow-md hover:scale-102"
-                   >
-                      <div className="flex items-center justify-center space-x-2">
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        <span>Add Your Own...</span>
-                      </div>
-                   </button>
+                   <p className="text-sm text-zinc-600 mt-1 mb-4">Upload an image and we'll detect objects for you to place.</p>
+                   
+                   {!uploadedProductUrl && !isDetectingProductObjects && (
+                       <button
+                          onClick={() => setAddProductModalOpen(true)}
+                          className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-700 font-semibold py-4 px-4 rounded-xl text-sm transition-all duration-200 border-2 border-dashed border-blue-300 shadow-sm hover:shadow-md hover:scale-[1.02]"
+                       >
+                          <div className="flex items-center justify-center space-x-3">
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            <span>Upload Product Image</span>
+                          </div>
+                       </button>
+                   )}
+                   
+                   {isDetectingProductObjects && (
+                       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
+                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+                           <p className="text-blue-700 font-semibold">Detecting objects in your image...</p>
+                           <p className="text-blue-600 text-sm mt-1">This may take a moment</p>
+                       </div>
+                   )}
+                   
+                   {uploadedProductUrl && uploadedProductObjects.length > 0 && (
+                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
+                           <div className="flex items-center space-x-3 mb-4">
+                               <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                   <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                   </svg>
+                               </div>
+                               <div>
+                                   <h5 className="font-semibold text-green-800">Objects Detected!</h5>
+                                   <p className="text-sm text-green-600">Click on an object to place it in your room</p>
+                               </div>
+                           </div>
+                           
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                               {uploadedProductObjects.map((obj, index) => (
+                                   <button
+                                       key={`${obj.name}-${index}`}
+                                       onClick={() => handleSelectDetectedObject(obj, uploadedProductUrl)}
+                                       className="bg-white hover:bg-green-50 border border-green-200 hover:border-green-300 rounded-lg p-4 text-left transition-all duration-200 hover:shadow-md hover:scale-[1.02] group"
+                                   >
+                                       <div className="flex items-center space-x-3">
+                                           <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                                               <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                               </svg>
+                                           </div>
+                                           <div className="flex-1">
+                                               <p className="font-semibold text-zinc-800 capitalize">{obj.name}</p>
+                                               <p className="text-sm text-zinc-600">{obj.category}</p>
+                                           </div>
+                                           <svg className="w-5 h-5 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                           </svg>
+                                       </div>
+                                   </button>
+                               ))}
+                           </div>
+                           
+                           <button
+                               onClick={() => {
+                                   setUploadedProductUrl(null);
+                                   setUploadedProductObjects([]);
+                               }}
+                               className="mt-4 w-full text-sm text-green-600 hover:text-green-800 underline transition-colors"
+                           >
+                               Upload a different image
+                           </button>
+                       </div>
+                   )}
+                   
+                   {uploadedProductUrl && uploadedProductObjects.length === 0 && !isDetectingProductObjects && (
+                       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
+                           <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                               <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
+                               </svg>
+                           </div>
+                           <p className="text-amber-800 font-semibold">No furniture objects detected</p>
+                           <p className="text-amber-700 text-sm mt-1">Try uploading an image with furniture, appliances, or decor items</p>
+                           <button
+                               onClick={() => {
+                                   setUploadedProductUrl(null);
+                                   setUploadedProductObjects([]);
+                               }}
+                               className="mt-3 text-sm text-amber-600 hover:text-amber-800 underline transition-colors"
+                           >
+                               Try a different image
+                           </button>
+                       </div>
+                   )}
               </div>
           </div>
 
