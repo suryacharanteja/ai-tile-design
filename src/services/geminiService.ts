@@ -368,3 +368,80 @@ export const changeColor = async (
     console.error("Model response did not contain an image part.", response);
     throw new Error("The AI model did not return an image. Please try again.");
 };
+
+/**
+ * Places a new object (furniture/decor) at a specific position in the room image.
+ * @param baseImageFile The original room image file.
+ * @param productImageFile The product/object image to be placed.
+ * @param position The x,y coordinates where to place the object (normalized 0-1).
+ * @param objectToRemove Optional object to remove before placing the new one.
+ * @returns A promise that resolves to the data URL of the generated image.
+ */
+export const placeObject = async (
+  baseImageFile: File,
+  productImageFile: File,
+  position: { x: number; y: number },
+  objectToRemove?: DetectedObject
+): Promise<string> => {
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
+    }
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    
+    const baseImagePart = await fileToPart(baseImageFile);
+    const productImagePart = await fileToPart(productImageFile);
+
+    const positionPercentX = Math.round(position.x * 100);
+    const positionPercentY = Math.round(position.y * 100);
+
+    let prompt = `
+        **Role:** You are a photorealistic interior design assistant specializing in object placement and room composition.
+
+        **Task:** Place the object from the second image into the room scene from the first image at the specified position, creating a natural and realistic result.
+
+        **Placement Instructions:**
+        - Position the object at approximately ${positionPercentX}% from the left and ${positionPercentY}% from the top of the image
+        - Scale the object appropriately for the room's perspective and depth
+        - Ensure proper lighting, shadows, and reflections that match the room's environment
+        - Make the placement look natural and realistic as if the object belongs in the space
+    `;
+
+    if (objectToRemove) {
+        prompt += `
+        **Object Removal:**
+        - First, remove the "${objectToRemove.name}" from the room
+        - Then place the new object in the specified position
+        - Ensure the removal area is seamlessly filled to match the surrounding environment
+        `;
+    }
+
+    prompt += `
+        **Quality Requirements:**
+        1. **Photorealism:** The result must look like a real photograph
+        2. **Proper Integration:** Lighting, shadows, and reflections must be consistent
+        3. **Natural Scaling:** Object size must match the room's perspective
+        4. **No Artifacts:** No visible seams, distortions, or unrealistic elements
+        5. **No Text Output:** Return only the modified image
+    `;
+
+    const textPart = { text: prompt };
+    const parts = [baseImagePart, productImagePart, textPart];
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+
+    if (imagePartFromResponse?.inlineData) {
+        const { mimeType, data } = imagePartFromResponse.inlineData;
+        return `data:${mimeType};base64,${data}`;
+    }
+
+    console.error("Model response did not contain an image part.", response);
+    throw new Error("The AI model did not return an image. Please try again.");
+};

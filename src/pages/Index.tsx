@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor } from '../services/geminiService';
+import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor, placeObject } from '../services/geminiService';
 import Header from '../components/Header';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
@@ -420,38 +420,46 @@ ${otherObjectsContext}
     
     const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
 
-    let prompt = '';
-    let productFile: File | undefined = undefined;
-
-    if (selectedProduct?.file) {
-        productFile = selectedProduct.file;
-        prompt = `
-            You are a hyper-realistic digital compositor AI.
-            Task: Realistically place the second image (a product) into the first image (the room scene).
-            Placement: The center of the product should be placed at the normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}.
-            Instructions:
-            1.  Integrate the product seamlessly.
-            2.  Adjust the product's lighting, shadows, and scale to match the scene's perspective and environment.
-            3.  The result must be photorealistic. Do not modify anything else in the original scene.
-        `;
-    } else if (placementPrompt) {
-        prompt = `
-            You are a hyper-realistic digital art director AI.
-            Task: Realistically generate and place a new object into the provided room scene image.
-            Object to generate: "${placementPrompt}".
-            Placement: The center of the new object should be placed at the normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}.
-            Instructions:
-            1.  Generate the described object from scratch.
-            2.  Integrate it seamlessly and photorealistically into the scene.
-            3.  Pay meticulous attention to the room's existing lighting, shadows, perspective, and scale to make the added object look natural.
-            4.  The result must be indistinguishable from a real photograph. Do not modify any other part of the original scene.
-        `;
-    }
-
-    setDebugInfo({ imageUrl: displayImageUrl, prompt });
-
     try {
-        const newImageUrl = await modifyImage(currentImageFile, prompt, productFile);
+        let newImageUrl: string;
+
+        if (selectedProduct?.file) {
+            // Use the new placeObject function for placing uploaded products
+            newImageUrl = await placeObject(
+                currentImageFile, 
+                selectedProduct.file, 
+                { x, y }, 
+                objectToRemove || undefined
+            );
+            setDebugInfo({ imageUrl: displayImageUrl, prompt: `Placed object at coordinates (${x.toFixed(3)}, ${y.toFixed(3)})` });
+        } else if (placementPrompt) {
+            // For text-based object generation, still use modifyImage with enhanced prompt
+            const prompt = `
+                You are a hyper-realistic digital art director AI.
+                Task: Realistically generate and place a new object into the provided room scene image.
+                Object to generate: "${placementPrompt}".
+                Placement: The center of the new object should be placed at the normalized coordinates x=${x.toFixed(3)}, y=${y.toFixed(3)}.
+                Instructions:
+                1. Generate the described object from scratch.
+                2. Integrate it seamlessly and photorealistically into the scene.
+                3. Pay meticulous attention to the room's existing lighting, shadows, perspective, and scale to make the added object look natural.
+                4. The result must be indistinguishable from a real photograph. Do not modify any other part of the original scene.
+            `;
+            
+            if (objectToRemove) {
+                const enhancedPrompt = `
+                    First, remove the "${objectToRemove.name}" from the room.
+                    Then: ${prompt}
+                `;
+                newImageUrl = await modifyImage(currentImageFile, enhancedPrompt);
+            } else {
+                newImageUrl = await modifyImage(currentImageFile, prompt);
+            }
+            setDebugInfo({ imageUrl: displayImageUrl, prompt });
+        } else {
+            throw new Error("No product or placement prompt provided");
+        }
+
         setDisplayImageUrl(newImageUrl);
         updateHistory(newImageUrl);
     } catch (error) {
@@ -460,7 +468,8 @@ ${otherObjectsContext}
     } finally {
         setAppState(AppState.Editing);
         setSelectedProduct(null); 
-        setPlacementPrompt(''); 
+        setPlacementPrompt('');
+        setObjectToRemove(null); // Clear object to remove after operation
     }
   };
 
