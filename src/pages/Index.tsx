@@ -1078,10 +1078,13 @@ ${otherObjectsContext}
                     </div>
                 )}
 
-                {/* Placement instruction overlay */}
+                {/* Placement instruction overlay moved to top-left of image for better UX */}
                 {isPlacementMode && imageUrl && (
-                    <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm font-semibold pointer-events-none animate-bounce">
-                        Click anywhere to place your object
+                    <div className="absolute top-2 left-2 bg-blue-600/90 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs font-medium pointer-events-none backdrop-blur-sm">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                            <span>Click anywhere to place your object</span>
+                        </div>
                     </div>
                 )}
             </div>
