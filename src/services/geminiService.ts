@@ -51,6 +51,105 @@ const fileToPart = async (file: File): Promise<{ inlineData: { mimeType: string;
 };
 
 /**
+ * Identifies complete furniture sets and objects in a product image for interior design.
+ * Focuses on high-level furniture pieces rather than individual components.
+ * @param imageFile The product image file.
+ * @returns A promise that resolves to an array of detected furniture objects.
+ */
+export const detectFurnitureObjects = async (imageFile: File): Promise<DetectedObject[]> => {
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
+    }
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    const imagePart = await fileToPart(imageFile);
+
+    const prompt = `
+        You are an expert interior designer analyzing a furniture product image. Your task is to identify complete furniture sets and major furniture pieces that would be placed as units in a room design.
+
+        **Think Like an Interior Designer:**
+        Focus on complete, functional furniture pieces that would be purchased and placed as complete sets, not individual components.
+
+        **Target Furniture Categories:**
+        - **Bedroom Sets**: Complete bed with headboard, nightstands, dressers
+        - **Living Room Sets**: Sofa sets, sectionals, coffee table sets, entertainment centers
+        - **Dining Sets**: Dining table with chairs, buffets, china cabinets
+        - **Office Sets**: Desk with chair, bookcases, filing cabinets
+        - **Storage Sets**: Wardrobes, closet systems, shelving units
+        - **Lighting Sets**: Floor lamps, table lamps, chandeliers as complete units
+        - **Decor Sets**: Wall art collections, plant arrangements, accent pieces
+
+        **Detection Rules:**
+        1. Identify the PRIMARY furniture piece (e.g., "Sofa Set", "Bedroom Set", "Dining Table Set")
+        2. Only detect SECONDARY pieces if they are clearly separate functional units
+        3. DO NOT break down furniture into components (no "left armrest", "cushions", etc.)
+        4. Focus on what an interior designer would specify in a room layout
+
+        **Examples:**
+        - A sofa image should be "Sofa Set" or "Sectional Sofa", not individual cushions
+        - A bedroom image should be "Bedroom Set" or separate "Bed", "Nightstand", "Dresser" if clearly distinct
+        - A dining room should be "Dining Set" or separate "Dining Table", "Dining Chairs"
+
+        **Output Requirements:**
+        For each furniture piece, provide:
+        1. **'name'**: Furniture set name (e.g., "Sofa Set", "Bedroom Set", "Coffee Table")
+        2. **'is_primary'**: true for the main furniture piece in the image
+        3. **'category'**: Always 'furniture' for this analysis
+        4. **'bounding_box'**: Normalized coordinates covering the complete furniture piece
+
+        Return JSON with "objects" array containing these furniture pieces.
+    `;
+    
+    try {
+        const response: GenerateContentResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [ {text: prompt}, imagePart ]},
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        objects: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    name: { type: Type.STRING },
+                                    is_primary: { type: Type.BOOLEAN },
+                                    category: { type: Type.STRING },
+                                    bounding_box: {
+                                        type: Type.OBJECT,
+                                        properties: {
+                                            x_min: { type: Type.NUMBER },
+                                            y_min: { type: Type.NUMBER },
+                                            x_max: { type: Type.NUMBER },
+                                            y_max: { type: Type.NUMBER },
+                                        },
+                                        required: ["x_min", "y_min", "x_max", "y_max"],
+                                    }
+                                },
+                                required: ["name", "is_primary", "bounding_box", "category"]
+                            }
+                        }
+                    },
+                    required: ["objects"]
+                },
+            },
+        });
+
+        const jsonString = response.text.trim();
+        const result = JSON.parse(jsonString);
+        if (!result.objects || !Array.isArray(result.objects)) {
+            console.warn("Model returned unexpected format for objects, falling back to empty array.", result);
+            return [];
+        }
+        return result.objects;
+    } catch (error) {
+        console.error("Error detecting furniture objects:", error);
+        throw new Error("Failed to parse the furniture. The AI could not identify furniture pieces.");
+    }
+};
+
+/**
  * Identifies distinct objects in a room image that are suitable for color changes.
  * @param imageFile The image file of the room.
  * @returns A promise that resolves to an array of detected objects.

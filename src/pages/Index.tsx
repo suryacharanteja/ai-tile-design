@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor, placeObject } from '../services/geminiService';
+import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, detectFurnitureObjects, redesignFloor, placeObject } from '../services/geminiService';
 import Header from '../components/Header';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
@@ -370,20 +370,10 @@ ${otherObjectsContext}
         const imageUrl = URL.createObjectURL(file);
         setUploadedProductUrl(imageUrl);
         
-        // Detect objects in the uploaded product image
-        const detectedObjects = await detectObjects(file);
+        // Detect furniture objects in the uploaded product image
+        const detectedObjects = await detectFurnitureObjects(file);
         
-        // Filter for furniture and important objects
-        const importantObjects = detectedObjects.filter(obj => 
-            obj.category === 'furniture' || 
-            ['sofa', 'chair', 'table', 'bed', 'tv', 'television', 'fridge', 'refrigerator', 
-             'lamp', 'mirror', 'cabinet', 'shelf', 'desk', 'couch', 'ottoman', 'dresser',
-             'nightstand', 'bookshelf', 'plant', 'vase', 'artwork', 'picture', 'frame'].some(keyword => 
-                obj.name.toLowerCase().includes(keyword)
-            )
-        );
-        
-        setUploadedProductObjects(importantObjects);
+        setUploadedProductObjects(detectedObjects);
         setPlacementPrompt('');
         setSelectedProduct(null);
         setObjectToRemove(null);
