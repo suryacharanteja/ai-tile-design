@@ -51,88 +51,6 @@ const fileToPart = async (file: File): Promise<{ inlineData: { mimeType: string;
 };
 
 /**
- * Identifies complete furniture sets and objects in a product image for interior design.
- * Focuses on high-level furniture pieces rather than individual components.
- * @param imageFile The product image file.
- * @returns A promise that resolves to an array of detected furniture objects.
- */
-export const detectFurnitureObjects = async (imageFile: File): Promise<DetectedObject[]> => {
-    if (!import.meta.env.VITE_API_KEY) {
-        throw new Error("VITE_API_KEY environment variable is not set");
-    }
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
-    const imagePart = await fileToPart(imageFile);
-
-    const prompt = `
-        **ROLE:** You are a master interior designer and furniture expert analyzing product images for precise object detection and room placement.
-
-        **OBJECTIVE:** Identify complete, placeable furniture pieces and decor items that can be integrated into interior spaces as functional units.
-
-        **FURNITURE DETECTION PRIORITIES:**
-        Focus ONLY on complete, ready-to-place items that an interior designer would specify:
-
-        **PRIMARY CATEGORIES:**
-        - **Seating**: Complete sofas, sectionals, chairs, benches (as unified pieces)
-        - **Tables**: Coffee tables, dining tables, side tables, console tables
-        - **Storage**: Wardrobes, dressers, bookshelves, cabinets, storage units
-        - **Bedroom**: Complete beds, nightstands, dressing tables
-        - **Lighting**: Floor lamps, table lamps, chandeliers, pendant lights
-        - **Decor Items**: Wall art, mirrors, sculptures, vases, decorative objects
-        - **Plants & Planters**: Indoor plants in containers, decorative planters
-
-        **DETECTION RULES:**
-        1. **Complete Units Only**: Detect furniture as complete, placeable pieces
-        2. **Interior Designer Perspective**: Think "What would I specify for a room?"
-        3. **Functional Grouping**: Group items that work together (e.g., "Dining Set" not individual chairs)
-        4. **NO Component Breakdown**: Never separate cushions, drawers, or parts
-        5. **Placement-Ready**: Only items that can be physically placed in a room
-
-        **ENHANCED EXAMPLES:**
-        - ✅ "Modern Sectional Sofa", "Wooden Coffee Table", "Floor Lamp"
-        - ✅ "Wall Mirror Set", "Decorative Vase", "Indoor Plant"
-        - ❌ "Left sofa cushion", "Table leg", "Lamp shade"
-
-        **BOUNDING BOX PRECISION:**
-        - Cover the COMPLETE object including all visual boundaries
-        - Include shadows and bases for floor items
-        - For wall items, include mounting hardware if visible
-        - Ensure tight, accurate bounds for optimal placement extraction
-
-        **OUTPUT REQUIREMENTS:**
-        For each detected furniture/decor piece:
-        1. **'name'**: Descriptive, placement-ready name (e.g., "Mid-Century Coffee Table")
-        2. **'is_primary'**: true for the most prominent/central item in the image
-        3. **'category'**: Always 'furniture' for this interior design analysis
-        4. **'bounding_box'**: Precise normalized coordinates for perfect object extraction
-
-        Return JSON with "objects" array containing these placement-ready furniture pieces.
-    `;
-    
-    try {
-        const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
-            contents: { parts: [ {text: prompt}, imagePart ]},
-        });
-
-        const jsonString = response.text?.trim() || '';
-        
-        // Sometimes the model might include markdown backticks around the JSON
-        const cleanedJsonString = jsonString.replace(/^```json\n|\n```$/g, '').trim();
-
-        const parsedResult = JSON.parse(cleanedJsonString);
-        
-        if (!parsedResult.objects || !Array.isArray(parsedResult.objects)) {
-            console.warn("Model returned unexpected format for objects, falling back to empty array.", parsedResult);
-            return [];
-        }
-        return parsedResult.objects;
-    } catch (error) {
-        console.error("Error detecting furniture objects:", error);
-        throw new Error("Failed to parse the furniture. The AI could not identify furniture pieces.");
-    }
-};
-
-/**
  * Identifies distinct objects in a room image that are suitable for color changes.
  * @param imageFile The image file of the room.
  * @returns A promise that resolves to an array of detected objects.
@@ -477,84 +395,53 @@ export const placeObject = async (
     const positionPercentY = Math.round(position.y * 100);
 
     let prompt = `
-        **CRITICAL INSTRUCTION: PRESERVE ORIGINAL IMAGE DIMENSIONS**
-        You MUST maintain the exact same aspect ratio and dimensions as the original room image. NO cropping, clipping, or resizing allowed.
+        **Role:** You are a photorealistic interior design assistant specializing in object placement and room composition.
 
-        **Role:** You are a master interior designer with expertise in photorealistic furniture placement and spatial composition.
+        **Task:** Place the object from the second image into the room scene from the first image at the specified position, creating a natural and realistic result.
 
-        **Primary Task:** 
-        Analyze the room from the first image and intelligently place the furniture/object from the second image at the user-specified coordinates, creating a perfectly integrated result.
-
-        **SPATIAL ANALYSIS REQUIREMENTS:**
-        1. **Room Context Understanding:**
-           - Analyze the room's architectural features (walls, floor, ceiling, windows)
-           - Identify existing furniture placement patterns and traffic flow
-           - Understand the room's lighting conditions and perspective depth
-           - Determine the most suitable surface for object placement (floor, wall, table, etc.)
-
-        2. **Smart Placement Logic:**
-           - Target position: ${positionPercentX}% from left, ${positionPercentY}% from top
-           - If target is on a wall: place object appropriately on the wall surface
-           - If target is on floor: place object on floor with proper ground contact
-           - If target is near existing furniture: integrate naturally with existing pieces
-           - Respect room scale and proportions
-
-        3. **PERSPECTIVE & SCALING ACCURACY:**
-           - Calculate proper object size based on room depth and perspective
-           - Objects closer to camera should appear larger, farther objects smaller
-           - Maintain realistic proportions relative to room and existing furniture
-           - Apply correct foreshortening and perspective distortion
-
-        4. **PHOTOREALISTIC INTEGRATION:**
-           - Match room's lighting direction, intensity, and color temperature
-           - Generate accurate shadows that follow the room's light sources
-           - Add reflections on appropriate surfaces (glossy floors, mirrors, etc.)
-           - Blend object edges seamlessly with the environment
-           - Maintain consistent image quality and grain throughout`;
+        **Placement Instructions:**
+        - Position the object at approximately ${positionPercentX}% from the left and ${positionPercentY}% from the top of the image
+        - Scale the object appropriately for the room's perspective and depth
+        - Ensure proper lighting, shadows, and reflections that match the room's environment
+        - Make the placement look natural and realistic as if the object belongs in the space
+    `;
 
     if (objectToRemove) {
         prompt += `
-
-        **OBJECT REMOVAL FIRST:**
-        - Carefully remove "${objectToRemove.name}" from the room
-        - Reconstruct the background area using surrounding patterns and textures
-        - Ensure no traces or artifacts remain from the removed object
-        - Maintain architectural continuity (wall patterns, floor textures, etc.)`;
+        **Object Removal:**
+        - First, remove the "${objectToRemove.name}" from the room
+        - Then place the new object in the specified position
+        - Ensure the removal area is seamlessly filled to match the surrounding environment
+        `;
     }
 
     prompt += `
-
-        **TECHNICAL REQUIREMENTS:**
-        1. **NO IMAGE MODIFICATION:** Preserve exact original dimensions and aspect ratio
-        2. **SEAMLESS INTEGRATION:** No visible edges, artifacts, or inconsistencies
-        3. **REALISTIC PHYSICS:** Objects must follow gravity and spatial rules
-        4. **LIGHTING CONSISTENCY:** All shadows and highlights must match room lighting
-        5. **MATERIAL ACCURACY:** Preserve object textures and material properties
-        6. **DEPTH PERCEPTION:** Maintain proper z-order and occlusion relationships
-
-        **OUTPUT:** Return ONLY the modified photorealistic image with the object perfectly placed.
+        **Quality Requirements:**
+        1. **Photorealism:** The result must look like a real photograph
+        2. **Proper Integration:** Lighting, shadows, and reflections must be consistent
+        3. **Natural Scaling:** Object size must match the room's perspective
+        4. **No Artifacts:** No visible seams, distortions, or unrealistic elements
+        5. **No Text Output:** Return only the modified image
     `;
 
     const textPart = { text: prompt };
     const parts = [baseImagePart, productImagePart, textPart];
 
-    try {
-        const response: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
-            contents: { parts },
-        });
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
 
-        const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
 
-        if (imagePartFromResponse?.inlineData) {
-            const { mimeType, data } = imagePartFromResponse.inlineData;
-            return `data:${mimeType};base64,${data}`;
-        }
-
-        console.error("Model response did not contain an image part.", response);
-        throw new Error("The AI model did not return an image. Please try again.");
-    } catch (error) {
-        console.error("Error in placeObject:", error);
-        throw new Error("Failed to place object. The AI could not complete the placement.");
+    if (imagePartFromResponse?.inlineData) {
+        const { mimeType, data } = imagePartFromResponse.inlineData;
+        return `data:${mimeType};base64,${data}`;
     }
+
+    console.error("Model response did not contain an image part.", response);
+    throw new Error("The AI model did not return an image. Please try again.");
 };

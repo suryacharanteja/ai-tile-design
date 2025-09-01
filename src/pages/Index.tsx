@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, detectFurnitureObjects, redesignFloor, placeObject } from '../services/geminiService';
+import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor, placeObject } from '../services/geminiService';
 import Header from '../components/Header';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
@@ -358,76 +358,18 @@ ${otherObjectsContext}
       }
   };
 
-  const [uploadedProductObjects, setUploadedProductObjects] = useState<DetectedObject[]>([]);
-  const [isDetectingProductObjects, setIsDetectingProductObjects] = useState(false);
-  const [uploadedProductUrl, setUploadedProductUrl] = useState<string | null>(null);
-
-  const handleAddProductFile = async (file: File) => {
-    try {
-        setIsDetectingProductObjects(true);
-        setAddProductModalOpen(false);
-        
-        const imageUrl = URL.createObjectURL(file);
-        setUploadedProductUrl(imageUrl);
-        
-        // Detect furniture objects in the uploaded product image
-        const detectedObjects = await detectFurnitureObjects(file);
-        
-        setUploadedProductObjects(detectedObjects);
-        setPlacementPrompt('');
-        setSelectedProduct(null);
-        setObjectToRemove(null);
-    } catch (error) {
-        console.error("Failed to detect objects in product image:", error);
-        setErrorMessage(error instanceof Error ? error.message : 'Failed to analyze product image');
-        setUploadedProductUrl(null);
-        setUploadedProductObjects([]);
-    } finally {
-        setIsDetectingProductObjects(false);
-    }
-  };
-
-  const handleSelectDetectedObject = (object: DetectedObject, imageUrl: string) => {
-    // Create a cropped image of the selected object
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    
-    img.onload = () => {
-        const { x_min, y_min, x_max, y_max } = object.bounding_box;
-        const objWidth = (x_max - x_min) * img.width;
-        const objHeight = (y_max - y_min) * img.height;
-        
-        canvas.width = objWidth;
-        canvas.height = objHeight;
-        
-        ctx?.drawImage(
-            img,
-            x_min * img.width, y_min * img.height, objWidth, objHeight,
-            0, 0, objWidth, objHeight
-        );
-        
-        canvas.toBlob((blob) => {
-            if (blob) {
-                const croppedImageUrl = URL.createObjectURL(blob);
-                const newProduct: Product = {
-                    id: `cropped-${Date.now()}`,
-                    name: object.name,
-                    imageUrl: croppedImageUrl,
-                    file: new File([blob], `${object.name}.png`, { type: 'image/png' }),
-                };
-                
-                setProducts(prev => [...prev, newProduct]);
-                setSelectedProduct(newProduct);
-                setUploadedProductObjects([]);
-                setUploadedProductUrl(null);
-                setPlacementPrompt('');
-                setObjectToRemove(null);
-            }
-        }, 'image/png');
+  const handleAddProductFile = (file: File) => {
+    const newProduct: Product = {
+        id: `custom-${Date.now()}`,
+        name: file.name.replace(/\.[^/.]+$/, ""),
+        imageUrl: URL.createObjectURL(file),
+        file: file,
     };
-    
-    img.src = imageUrl;
+    setProducts(prev => [...prev, newProduct]);
+    setSelectedProduct(newProduct);
+    setPlacementPrompt('');
+    setObjectToRemove(null);
+    setAddProductModalOpen(false);
   };
 
   const handleRemoveObject = async () => {
@@ -819,41 +761,40 @@ ${otherObjectsContext}
       <div className="space-y-8">
         {/* Placement Progress Indicator */}
         {isReadyToPlace && (
-          <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border-2 border-emerald-300 rounded-xl p-6 shadow-lg animate-pulse-slow">
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center text-sm font-bold">✓</div>
-                <span className="text-sm font-semibold text-emerald-800">Object Selected</span>
-                <div className="w-8 h-px bg-emerald-400"></div>
-                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold animate-bounce">2</div>
-                <span className="text-sm font-semibold text-blue-600 animate-pulse">CLICK ON ROOM IMAGE!</span>
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                <span className="text-sm font-semibold text-zinc-700">Object Selected</span>
+                <div className="w-4 h-px bg-zinc-300"></div>
+                <div className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold animate-pulse">2</div>
+                <span className="text-sm font-semibold text-blue-600">Click to Place</span>
               </div>
             </div>
-            <div className="bg-white rounded-lg p-4 border-2 border-blue-300 shadow-md">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center border-2 border-blue-200">
+            <div className="bg-white rounded-lg p-4 border border-blue-200">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                   {selectedProduct ? (
-                    <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-10 h-10 object-contain" />
+                    <img src={selectedProduct.imageUrl} alt={selectedProduct.name} className="w-8 h-8 object-contain" />
                   ) : (
-                    <svg className="w-8 h-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-bold text-lg text-zinc-800">
+                  <p className="font-semibold text-zinc-800">
                     {selectedProduct ? selectedProduct.name : placementPrompt}
                   </p>
-                  <p className="text-blue-700 font-semibold">Ready to place in your room</p>
-                  <p className="text-sm text-zinc-600 mt-1">👆 Click anywhere on the room image below to place this object</p>
+                  <p className="text-sm text-zinc-600">Ready to place in your room</p>
                 </div>
-                <div className="text-right bg-blue-50 p-3 rounded-lg border border-blue-200">
-                  <p className="text-xs text-blue-600 font-semibold mb-1">NEXT STEP</p>
-                  <div className="flex items-center space-x-2 text-blue-700">
-                    <svg className="w-5 h-5 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="text-right">
+                  <p className="text-xs text-zinc-500 mb-1">Next Step</p>
+                  <div className="flex items-center space-x-2 text-blue-600">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                     </svg>
-                    <span className="text-sm font-bold">CLICK ROOM IMAGE</span>
+                    <span className="text-sm font-semibold">Click on image →</span>
                   </div>
                 </div>
               </div>
@@ -939,101 +880,18 @@ ${otherObjectsContext}
 
               <div>
                    <h4 className="font-semibold text-zinc-700">Upload Your Own Product</h4>
-                   <p className="text-sm text-zinc-600 mt-1 mb-4">Upload an image and we'll detect objects for you to place.</p>
-                   
-                   {!uploadedProductUrl && !isDetectingProductObjects && (
-                       <button
-                          onClick={() => setAddProductModalOpen(true)}
-                          className="w-full bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-700 font-semibold py-4 px-4 rounded-xl text-sm transition-all duration-200 border-2 border-dashed border-blue-300 shadow-sm hover:shadow-md hover:scale-[1.02]"
-                       >
-                          <div className="flex items-center justify-center space-x-3">
-                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            <span>Upload Product Image</span>
-                          </div>
-                       </button>
-                   )}
-                   
-                   {isDetectingProductObjects && (
-                       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 text-center">
-                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
-                           <p className="text-blue-700 font-semibold">Detecting objects in your image...</p>
-                           <p className="text-blue-600 text-sm mt-1">This may take a moment</p>
-                       </div>
-                   )}
-                   
-                   {uploadedProductUrl && uploadedProductObjects.length > 0 && (
-                       <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
-                           <div className="flex items-center space-x-3 mb-4">
-                               <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                   <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                   </svg>
-                               </div>
-                               <div>
-                                   <h5 className="font-semibold text-green-800">Objects Detected!</h5>
-                                   <p className="text-sm text-green-600">Click on an object to place it in your room</p>
-                               </div>
-                           </div>
-                           
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                               {uploadedProductObjects.map((obj, index) => (
-                                   <button
-                                       key={`${obj.name}-${index}`}
-                                       onClick={() => handleSelectDetectedObject(obj, uploadedProductUrl)}
-                                       className="bg-white hover:bg-green-50 border border-green-200 hover:border-green-300 rounded-lg p-4 text-left transition-all duration-200 hover:shadow-md hover:scale-[1.02] group"
-                                   >
-                                       <div className="flex items-center space-x-3">
-                                           <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                                               <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                                               </svg>
-                                           </div>
-                                           <div className="flex-1">
-                                               <p className="font-semibold text-zinc-800 capitalize">{obj.name}</p>
-                                               <p className="text-sm text-zinc-600">{obj.category}</p>
-                                           </div>
-                                           <svg className="w-5 h-5 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                           </svg>
-                                       </div>
-                                   </button>
-                               ))}
-                           </div>
-                           
-                           <button
-                               onClick={() => {
-                                   setUploadedProductUrl(null);
-                                   setUploadedProductObjects([]);
-                               }}
-                               className="mt-4 w-full text-sm text-green-600 hover:text-green-800 underline transition-colors"
-                           >
-                               Upload a different image
-                           </button>
-                       </div>
-                   )}
-                   
-                   {uploadedProductUrl && uploadedProductObjects.length === 0 && !isDetectingProductObjects && (
-                       <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-                           <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                               <svg className="w-6 h-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
-                               </svg>
-                           </div>
-                           <p className="text-amber-800 font-semibold">No furniture objects detected</p>
-                           <p className="text-amber-700 text-sm mt-1">Try uploading an image with furniture, appliances, or decor items</p>
-                           <button
-                               onClick={() => {
-                                   setUploadedProductUrl(null);
-                                   setUploadedProductObjects([]);
-                               }}
-                               className="mt-3 text-sm text-amber-600 hover:text-amber-800 underline transition-colors"
-                           >
-                               Try a different image
-                           </button>
-                       </div>
-                   )}
+                   <p className="text-sm text-zinc-600 mt-1 mb-4">Add a product from your device (PNG with a transparent background works best).</p>
+                   <button
+                      onClick={() => setAddProductModalOpen(true)}
+                      className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-3 px-4 rounded-lg text-sm transition-all duration-200 border border-dashed border-zinc-300 shadow-sm hover:shadow-md hover:scale-102"
+                   >
+                      <div className="flex items-center justify-center space-x-2">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <span>Add Your Own...</span>
+                      </div>
+                   </button>
               </div>
           </div>
 
@@ -1106,9 +964,9 @@ ${otherObjectsContext}
             <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-bold">{title}</h2>
                 {isPlacementMode && (
-                    <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-emerald-500 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg animate-pulse">
-                        <div className="w-3 h-3 bg-white rounded-full animate-bounce"></div>
-                        <span>👆 CLICK ROOM IMAGE TO PLACE!</span>
+                    <div className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
+                        <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+                        <span>Click to place object</span>
                     </div>
                 )}
                 {isRemovalMode && (
@@ -1220,18 +1078,12 @@ ${otherObjectsContext}
                     </div>
                 )}
 
-                {/* Enhanced placement instruction overlay */}
+                {/* Placement instruction overlay moved to top-left of image for better UX */}
                 {isPlacementMode && imageUrl && (
-                    <div className="absolute top-4 left-4 bg-gradient-to-r from-blue-600 to-emerald-600 text-white px-4 py-3 rounded-xl shadow-xl text-sm font-bold pointer-events-none backdrop-blur-sm border-2 border-white/20 animate-pulse">
-                        <div className="flex items-center space-x-3">
-                            <div className="w-3 h-3 bg-white rounded-full animate-bounce"></div>
-                            <span>CLICK ANYWHERE ON THIS IMAGE TO PLACE</span>
-                            <svg className="w-4 h-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
-                            </svg>
-                        </div>
-                        <div className="text-xs mt-1 opacity-90">
-                            {selectedProduct ? `Placing: ${selectedProduct.name}` : `Adding: ${placementPrompt}`}
+                    <div className="absolute top-2 left-2 bg-blue-600/90 text-white px-3 py-1.5 rounded-lg shadow-lg text-xs font-medium pointer-events-none backdrop-blur-sm">
+                        <div className="flex items-center space-x-2">
+                            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                            <span>Click anywhere to place your object</span>
                         </div>
                     </div>
                 )}
