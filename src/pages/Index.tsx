@@ -910,33 +910,115 @@ ${otherObjectsContext}
                   </button>
                 )}
 
-                {placementMarker && (
-                  <div className="absolute pointer-events-none animate-ping" style={{ left: placementMarker.x, top: placementMarker.y, transform: 'translate(-50%, -50%)' }}>
-                    <div className="w-4 h-4 bg-blue-500 rounded-full opacity-75"></div>
-                  </div>
+                {isAfter && placementMarker && (
+                    <div
+                        className="placement-marker"
+                        style={{
+                            top: `${placementMarker.y}px`,
+                            left: `${placementMarker.x}px`,
+                        }}
+                    ></div>
+                )}
+
+                {isAfter && selectedObject && activeTab === 'manual' && (
+                    <div
+                        className="absolute border-4 border-blue-500 rounded-md pointer-events-none shadow-lg"
+                        style={{
+                            left: `${selectedObject.bounding_box.x_min * 100}%`,
+                            top: `${selectedObject.bounding_box.y_min * 100}%`,
+                            width: `${(selectedObject.bounding_box.x_max - selectedObject.bounding_box.x_min) * 100}%`,
+                            height: `${(selectedObject.bounding_box.y_max - selectedObject.bounding_box.y_min) * 100}%`,
+                        }}
+                    ></div>
+                )}
+                {isAfter && objectToRemove && activeTab === 'placement' && (
+                    <div
+                        className="absolute border-4 border-red-500 rounded-md pointer-events-none shadow-lg"
+                        style={{
+                            left: `${objectToRemove.bounding_box.x_min * 100}%`,
+                            top: `${objectToRemove.bounding_box.y_min * 100}%`,
+                            width: `${(objectToRemove.bounding_box.x_max - objectToRemove.bounding_box.x_min) * 100}%`,
+                            height: `${(objectToRemove.bounding_box.y_max - objectToRemove.bounding_box.y_min) * 100}%`,
+                        }}
+                    ></div>
                 )}
             </div>
         </div>
       );
     };
 
+    const TABS: { id: EditorTab; label: string }[] = [
+      { id: 'manual', label: 'Manual Painter' },
+      { id: 'floor', label: 'Floor Redesign' },
+      { id: 'themes', label: 'Design Themes' },
+      { id: 'placement', label: 'Object Placement' },
+    ];
+
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {renderImagePanel("Before", originalImageUrl, beforeImageRef)}
-        {renderImagePanel("After", displayImageUrl, afterImageRef, true)}
-      </div>
+        <div className="w-full max-w-7xl mx-auto animate-fade-in">
+            <PreviewModal isOpen={isPreviewModalOpen} onClose={() => setIsPreviewModalOpen(false)} imageUrl={displayImageUrl} />
+            <DebugModal isOpen={isDebugModalOpen} onClose={() => setDebugModalOpen(false)} imageUrl={debugInfo.imageUrl} prompt={debugInfo.prompt} />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {renderImagePanel('Before', originalImageUrl, beforeImageRef)}
+                <div>
+                    {renderImagePanel('After', displayImageUrl, afterImageRef, true)}
+                    <div className="flex items-center justify-between mt-4 p-2 bg-white rounded-lg border">
+                        <div className="flex items-center space-x-1">
+                            <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-2 rounded-md hover:bg-zinc-100 disabled:opacity-50"><UndoIcon /></button>
+                            <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2 rounded-md hover:bg-zinc-100 disabled:opacity-50"><RedoIcon /></button>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                            <button className="p-2 rounded-md hover:bg-zinc-100"><ZoomInIcon /></button>
+                            <button className="p-2 rounded-md hover:bg-zinc-100"><ZoomOutIcon /></button>
+                            <button className="p-2 rounded-md hover:bg-zinc-100"><ResetViewIcon /></button>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button onClick={() => setDebugModalOpen(true)} className="px-3 py-1.5 rounded-md hover:bg-zinc-100 font-medium text-sm border">Debug</button>
+                            <button onClick={handleDownload} className="p-2 rounded-md bg-zinc-800 text-white hover:bg-zinc-900 disabled:opacity-50" disabled={!displayImageUrl || displayImageUrl === originalImageUrl}><DownloadIcon /></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg border mt-8">
+                {errorMessage && (
+                    <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-800 rounded-lg flex justify-between items-center">
+                        <span>{errorMessage}</span>
+                        <button onClick={clearError} className="font-bold">✕</button>
+                    </div>
+                )}
+
+                <div className="border-b border-zinc-200 mb-6">
+                    <nav className="-mb-px flex space-x-6 overflow-x-auto">
+                        {TABS.map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id ? 'border-blue-500 text-blue-600' : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'}`}>
+                                {tab.label}
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+
+                {appState === AppState.Generating && <div className="text-center py-8"><Spinner /><p className="mt-2">Generating your new image...</p></div>}
+                
+                <div className={appState === AppState.Generating ? 'hidden' : ''}>
+                    {activeTab === 'manual' && renderManualPainter()}
+                    {activeTab === 'floor' && renderFloorRedesign()}
+                    {activeTab === 'themes' && renderDesignThemes()}
+                    {activeTab === 'placement' && renderObjectPlacement()}
+                </div>
+            </div>
+        </div>
     );
   };
-
-  // Main render based on app state
+  
   if (appState === AppState.Initial) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 p-4">
-        <div className="max-w-4xl mx-auto pt-8">
-          <Header />
-          <div className="mt-12">
-            <ImageUploader id="main-uploader" onFileSelect={handleFileSelect} imageUrl={null} />
-          </div>
+      <div className="container mx-auto p-4 flex flex-col items-center">
+        <Header />
+        <div className="w-full max-w-2xl mt-8">
+            <ImageUploader id="main-uploader" onFileSelect={handleFileSelect} imageUrl={originalImageUrl} />
+            {errorMessage && <p className="text-red-500 mt-4 text-center">{errorMessage}</p>}
         </div>
       </div>
     );
@@ -944,137 +1026,41 @@ ${otherObjectsContext}
 
   if (appState === AppState.Detecting) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 flex items-center justify-center">
-        <div className="text-center">
+      <div className="container mx-auto p-4 flex flex-col items-center justify-center text-center" style={{ minHeight: '90vh' }}>
+        <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-zinc-800">
+          Room Painter AI
+        </h1>
+        <p className="mt-4 text-lg text-zinc-600 max-w-3xl mx-auto">
+          Transform your living space with AI-powered interior design. Upload a photo of your room and watch as our intelligent system identifies objects and suggests beautiful color schemes.
+        </p>
+        <button 
+          onClick={handleStartOver} 
+          className="mt-8 text-blue-600 hover:text-blue-800 font-semibold transition-colors underline"
+        >
+          Start Over
+        </button>
+        <div className="mt-12">
           <Spinner />
-          <p className="mt-4 text-zinc-600">Analyzing your room...</p>
+          <p className="mt-4 text-zinc-600">Analyzing your space...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-50 to-zinc-100 p-4">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header with Controls */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Room Painter AI</h1>
-            <p className="text-muted-foreground">Transform your space with intelligent color suggestions</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={handleStartOver} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm font-semibold">
-              Start Over
-            </button>
-            <button onClick={() => setDebugModalOpen(true)} className="px-4 py-2 bg-zinc-600 text-white rounded-md hover:bg-zinc-700 transition-colors text-sm font-semibold">
-              Debug
-            </button>
-            <button onClick={handleDownload} disabled={!displayImageUrl} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:bg-green-300 text-sm font-semibold">
-              <DownloadIcon />
-            </button>
-          </div>
-        </div>
-
-        {/* Error Display */}
-        {errorMessage && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md">
-            <p className="font-semibold">Error:</p>
-            <p>{errorMessage}</p>
-            <button onClick={clearError} className="mt-2 text-sm underline">Dismiss</button>
-          </div>
-        )}
-
-        {/* Tab Navigation */}
-        <div className="border-b border-zinc-200">
-          <nav className="flex space-x-8">
-            {[
-              { id: 'manual', label: 'Manual Painter' },
-              { id: 'themes', label: 'Design Themes' },
-              { id: 'placement', label: 'Object Placement' },
-              { id: 'floor', label: 'Floor Redesign' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as EditorTab)}
-                className={`py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id 
-                    ? 'border-blue-500 text-blue-600' 
-                    : 'border-transparent text-zinc-500 hover:text-zinc-700 hover:border-zinc-300'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Panel - Controls */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-6 sticky top-4">
-              {appState === AppState.Generating && (
-                <div className="flex items-center justify-center p-8">
-                  <Spinner />
-                  <span className="ml-3 text-zinc-600">Generating...</span>
-                </div>
-              )}
-              
-              {appState === AppState.Editing && (
-                <>
-                  {activeTab === 'manual' && renderManualPainter()}
-                  {activeTab === 'themes' && renderDesignThemes()}
-                  {activeTab === 'placement' && renderObjectPlacement()}
-                  {activeTab === 'floor' && renderFloorRedesign()}
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Right Panel - Images */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
-              {/* Image Controls */}
-              <div className="flex justify-between items-center">
-                <div className="flex gap-2">
-                  <button onClick={handleUndo} disabled={historyIndex <= 0} className="p-2 border rounded-md hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <UndoIcon />
-                  </button>
-                  <button onClick={handleRedo} disabled={historyIndex >= history.length - 1} className="p-2 border rounded-md hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <RedoIcon />
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={() => setZoomLevel(prev => Math.max(0.5, prev * 0.9))} className="p-2 border rounded-md hover:bg-zinc-50">
-                    <ZoomOutIcon />
-                  </button>
-                  <button onClick={() => { setZoomLevel(1); setPanOffset({ x: 0, y: 0 }); }} className="p-2 border rounded-md hover:bg-zinc-50">
-                    <ResetViewIcon />
-                  </button>
-                  <button onClick={() => setZoomLevel(prev => Math.min(5, prev * 1.1))} className="p-2 border rounded-md hover:bg-zinc-50">
-                    <ZoomInIcon />
-                  </button>
-                </div>
-              </div>
-
-              {renderEditor()}
-            </div>
-          </div>
-        </div>
-
-        {/* Modals */}
-        <DebugModal 
-          isOpen={isDebugModalOpen}
-          onClose={() => setDebugModalOpen(false)}
-          imageUrl={debugInfo.imageUrl}
-          prompt={debugInfo.prompt}
-        />
-        
-        <PreviewModal 
-          isOpen={isPreviewModalOpen}
-          onClose={() => setIsPreviewModalOpen(false)}
-          imageUrl={displayImageUrl}
-        />
+    <div className="container mx-auto p-4">
+      <div className="mb-4">
+          <Header />
       </div>
+      <div className="text-center mb-8">
+        <button 
+            onClick={handleStartOver} 
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 transition-colors shadow-sm"
+        >
+            Start Over
+        </button>
+      </div>
+      {renderEditor()}
     </div>
   );
 };
