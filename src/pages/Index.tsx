@@ -101,6 +101,21 @@ const dataUrlToFile = async (dataUrl: string, filename: string): Promise<File> =
     return new File([blob], filename, { type: blob.type });
 };
 
+const getLoadingMessage = (activeTab: EditorTab): string => {
+  switch (activeTab) {
+    case 'manual':
+      return '🎨 Painting your room with precision...';
+    case 'floor':
+      return '✨ Adding new style to your floor...';
+    case 'themes':
+      return '🏠 Your room will be stylized beautifully...';
+    case 'placement':
+      return '🪑 Object will be perfectly placed or removed...';
+    default:
+      return '🔄 Processing your request...';
+  }
+};
+
 const Index: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.Initial);
   const [originalImage, setOriginalImage] = useState<File | null>(null);
@@ -980,8 +995,7 @@ ${otherObjectsContext}
                 {/* Detecting Phase */}
                 {uploadStep === 'detect' && isDetectingFurniture && (
                   <div className="text-center py-8">
-                    <Spinner />
-                    <p className="mt-4 text-sm text-gray-600">Analyzing furniture sets like an interior designer...</p>
+                    <Spinner message="🎨 Analyzing furniture sets like an interior designer..." />
                   </div>
                 )}
 
@@ -1314,7 +1328,11 @@ ${otherObjectsContext}
                     </nav>
                 </div>
 
-                {appState === AppState.Generating && <div className="text-center py-8"><Spinner /><p className="mt-2">Generating your new image...</p></div>}
+                {appState === AppState.Generating && (
+                  <div className="text-center py-8">
+                    <Spinner message={getLoadingMessage(activeTab)} />
+                  </div>
+                )}
                 
                 <div className={appState === AppState.Generating ? 'hidden' : ''}>
                     {activeTab === 'manual' && renderManualPainter()}
@@ -1355,8 +1373,7 @@ ${otherObjectsContext}
           Start Over
         </button>
         <div className="mt-12">
-          <Spinner />
-          <p className="mt-4 text-zinc-600">Analyzing your space...</p>
+          <Spinner message="🔍 Analyzing your space..." />
         </div>
       </div>
     );
