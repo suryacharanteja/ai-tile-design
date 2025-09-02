@@ -101,7 +101,7 @@ const dataUrlToFile = async (dataUrl: string, filename: string): Promise<File> =
     return new File([blob], filename, { type: blob.type });
 };
 
-const getLoadingMessage = (activeTab: EditorTab): string => {
+const getLoadingMessage = (activeTab: EditorTab, objectToRemove?: any, placementPrompt?: string, selectedFurnitureSet?: any): string => {
   switch (activeTab) {
     case 'manual':
       return '🎨 Painting your room with precision...';
@@ -110,7 +110,14 @@ const getLoadingMessage = (activeTab: EditorTab): string => {
     case 'themes':
       return '🏠 Your room will be stylized beautifully...';
     case 'placement':
-      return '🪑 Object will be perfectly placed or removed...';
+      if (objectToRemove) {
+        return '🗑️ Removing objects from your space...';
+      } else if (selectedFurnitureSet) {
+        return '📦 Placing your custom furniture precisely...';
+      } else if (placementPrompt) {
+        return '🪑 Adding new objects to your room...';
+      }
+      return '🔄 Processing your object placement...';
     default:
       return '🔄 Processing your request...';
   }
@@ -1330,7 +1337,7 @@ ${otherObjectsContext}
 
                 {appState === AppState.Generating && (
                   <div className="text-center py-8">
-                    <Spinner message={getLoadingMessage(activeTab)} />
+                    <Spinner message={getLoadingMessage(activeTab, objectToRemove, placementPrompt, selectedFurnitureSet)} />
                   </div>
                 )}
                 
