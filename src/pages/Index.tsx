@@ -16,6 +16,7 @@ import PreviewModal from '../components/PreviewModal';
 import ColorPickerPopover from '../components/ColorPickerPopover';
 import FurnitureSetCard from '../components/FurnitureSetCard';
 import { Textarea } from '../components/ui/textarea';
+import Footer from '../components/Footer';
 
 enum AppState {
   Initial,
@@ -1400,6 +1401,7 @@ ${otherObjectsContext}
         </button>
       </div>
       {renderEditor()}
+      <Footer />
     </div>
   );
 };
