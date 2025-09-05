@@ -18,7 +18,7 @@ import ColorPickerPopover from '../components/ColorPickerPopover';
 import FurnitureSetCard from '../components/FurnitureSetCard';
 import { Textarea } from '../components/ui/textarea';
 import Footer from '../components/Footer';
-import { getTilesByRoomType, getTileSetsByRoomType, KajariaTile, TileSet } from '../types/kajaria';
+import { getTilesByRoomType, getTileSetsByRoomType, getKitchenModularSetsByRoomType, KajariaTile, TileSet, KitchenModularSet } from '../types/kajaria';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -179,6 +179,7 @@ const Index: React.FC = () => {
   const [uploadStep, setUploadStep] = useState<'upload' | 'detect' | 'select' | 'place'>('upload');
   const [selectedTiles, setSelectedTiles] = useState<Set<string>>(new Set());
   const [selectedTileSets, setSelectedTileSets] = useState<Set<string>>(new Set());
+  const [selectedKitchenSets, setSelectedKitchenSets] = useState<Set<string>>(new Set());
   const [generatingMultiple, setGeneratingMultiple] = useState(false);
   const [generatedDesigns, setGeneratedDesigns] = useState<Array<{
     id: string;
@@ -212,6 +213,7 @@ const Index: React.FC = () => {
     setHistoryIndex(-1);
     setSelectedTiles(new Set());
     setSelectedTileSets(new Set());
+    setSelectedKitchenSets(new Set());
     setGeneratingMultiple(false);
   };
 
@@ -249,6 +251,7 @@ const Index: React.FC = () => {
     setUploadStep('upload');
     setSelectedTiles(new Set());
     setSelectedTileSets(new Set());
+    setSelectedKitchenSets(new Set());
     setGeneratingMultiple(false);
     setGeneratedDesigns([]);
     setIsGalleryVisible(false);
@@ -814,6 +817,20 @@ ${otherObjectsContext}
     }
   };
 
+  const handleKitchenSetSelect = (kitchenSet: KitchenModularSet) => {
+    if (selectedRoomType !== 'kitchen') return; // Only for kitchen
+    
+    if (selectedKitchenSets.has(kitchenSet.id)) {
+      const newSelectedKitchenSets = new Set(selectedKitchenSets);
+      newSelectedKitchenSets.delete(kitchenSet.id);
+      setSelectedKitchenSets(newSelectedKitchenSets);
+    } else {
+      const newSelectedKitchenSets = new Set(selectedKitchenSets);
+      newSelectedKitchenSets.add(kitchenSet.id);
+      setSelectedKitchenSets(newSelectedKitchenSets);
+    }
+  };
+
   const handleApplySelectedTile = async (tile: KajariaTile) => {
     if (!displayImageUrl || !originalImage) return;
     clearError();
@@ -859,7 +876,92 @@ ${otherObjectsContext}
     }
   };
 
+  const handleApplySelectedKitchenSet = async (kitchenSet: KitchenModularSet) => {
+    if (!displayImageUrl || !originalImage) return;
+    clearError();
+    setAppState(AppState.Generating);
+
+    const backsplashTile = kitchenSet.backsplashTile;
+    const sink = kitchenSet.sinkSpecs;
+    const granite = kitchenSet.graniteRecommendation;
+    
+    const prompt = `Transform this kitchen image by applying the following modular set: Apply a photorealistic ${backsplashTile.name} tile pattern (${backsplashTile.series} series, code ${backsplashTile.code}, size ${backsplashTile.size}) to all visible backsplash/wall areas. Replace or add a ${sink.material} ${sink.type} sink (${sink.size}) in an appropriate countertop location. The countertop should appear to be ${granite.color} granite with ${granite.pattern} to complement the tile selection. Preserve all other kitchen elements exactly as they are. All elements should look natural and realistic with proper lighting and perspective that matches the kitchen's existing conditions.`;
+
+    try {
+      const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+      const newImageUrl = await redesignFloor(currentImageFile, prompt);
+      setDisplayImageUrl(newImageUrl);
+      updateHistory(newImageUrl);
+      setAppState(AppState.Editing);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "An unknown error occurred during kitchen redesign.");
+      setAppState(AppState.Editing);
+    }
+  };
+
   const handleGenerateMultipleDesigns = async () => {
+    if (selectedRoomType === 'kitchen') {
+      // Handle kitchen modular sets
+      if (!displayImageUrl || !originalImage || selectedKitchenSets.size === 0) {
+        toast.error("Please select at least one kitchen set and ensure an image is loaded");
+        return;
+      }
+      
+      setGeneratingMultiple(true);
+      clearError();
+      setGeneratedDesigns([]);
+      setIsGalleryVisible(false);
+      
+      const kitchenSets = getKitchenModularSetsByRoomType(selectedRoomType);
+      const kitchenSetsToGenerate = Array.from(selectedKitchenSets).map(kitchenSetId => 
+        kitchenSets.find(kitchenSet => kitchenSet.id === kitchenSetId)!
+      );
+
+      try {
+        console.log(`Starting generation of ${kitchenSetsToGenerate.length} kitchen designs...`);
+        toast.info(`Generating ${kitchenSetsToGenerate.length} kitchen designs...`);
+        
+        const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+        const newGeneratedDesigns = [];
+        
+        for (let i = 0; i < kitchenSetsToGenerate.length; i++) {
+          const kitchenSet = kitchenSetsToGenerate[i];
+          console.log(`Generating design ${i + 1}/${kitchenSetsToGenerate.length}: ${kitchenSet.name}`);
+          
+          const backsplashTile = kitchenSet.backsplashTile;
+          const sink = kitchenSet.sinkSpecs;
+          const granite = kitchenSet.graniteRecommendation;
+          
+          const prompt = `Transform this kitchen image by applying the following modular set: Apply a photorealistic ${backsplashTile.name} tile pattern (${backsplashTile.series} series, code ${backsplashTile.code}, size ${backsplashTile.size}) to all visible backsplash/wall areas. Replace or add a ${sink.material} ${sink.type} sink (${sink.size}) in an appropriate countertop location. The countertop should appear to be ${granite.color} granite with ${granite.pattern} to complement the tile selection. Preserve all other kitchen elements exactly as they are. All elements should look natural and realistic with proper lighting and perspective.`;
+          
+          const newImageUrl = await redesignFloor(currentImageFile, prompt);
+          newGeneratedDesigns.push({
+            id: `${kitchenSet.id}_${Date.now()}_${i}`,
+            imageUrl: newImageUrl,
+            tileName: kitchenSet.name,
+            tileCode: backsplashTile.code,
+            tileSeries: backsplashTile.series
+          });
+          
+          console.log(`Completed design ${i + 1}/${kitchenSetsToGenerate.length}`);
+        }
+        
+        console.log(`All kitchen designs generated! Total: ${newGeneratedDesigns.length}`);
+        setGeneratedDesigns(newGeneratedDesigns);
+        setIsGalleryVisible(true);
+        toast.success(`Generated ${newGeneratedDesigns.length} kitchen designs! Check the gallery below.`);
+        
+      } catch (error) {
+        console.error("Error in handleGenerateMultipleDesigns:", error);
+        toast.error(`Failed to generate designs: ${error instanceof Error ? error.message : "Unknown error"}`);
+        setErrorMessage(error instanceof Error ? error.message : "An error occurred during multiple design generation.");
+      } finally {
+        setGeneratingMultiple(false);
+      }
+      return;
+    }
+
     if (selectedRoomType === 'bathroom') {
       // Handle bathroom tile sets
       if (!displayImageUrl || !originalImage || selectedTileSets.size === 0) {
@@ -1183,6 +1285,138 @@ ${otherObjectsContext}
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800">
                 <strong>{selectedTileSets.size}</strong> tile sets selected for multiple generation
+              </p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (selectedRoomType === 'kitchen') {
+      // Kitchen modular sets logic
+      const kitchenModularSets = getKitchenModularSetsByRoomType(selectedRoomType);
+      
+      return (
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-zinc-800 mb-1">Kajaria Kitchen Modular Sets</h3>
+          <p className="text-sm text-zinc-600 mb-4">Select complete kitchen sets (backsplash + sink + granite recommendation). Choose multiple sets for batch generation.</p>
+          
+          {/* Granite Disclaimer */}
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+            <p className="text-sm text-amber-800">
+              <strong>Note:</strong> Granite/Marble countertops are not sold by us. We provide color recommendations for customer procurement.
+            </p>
+          </div>
+          
+          {/* Action Buttons */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <Button 
+              onClick={handleGenerateMultipleDesigns}
+              disabled={selectedKitchenSets.size === 0 || generatingMultiple}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Wand2 className="w-4 h-4" />
+              {generatingMultiple ? 'Generating...' : `Generate Selected (${selectedKitchenSets.size})`}
+            </Button>
+            <Button 
+              onClick={handleGenerateAllDesigns}
+              disabled={generatingMultiple}
+              className="flex items-center gap-2"
+            >
+              <Wand2 className="w-4 h-4" />
+              {generatingMultiple ? 'Generating...' : 'Generate All Designs'}
+            </Button>
+          </div>
+
+          {/* Kitchen Sets Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {kitchenModularSets.map(kitchenSet => {
+              const isSelected = selectedKitchenSets.has(kitchenSet.id);
+              return (
+                <Card 
+                  key={kitchenSet.id} 
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+                  onClick={() => handleKitchenSetSelect(kitchenSet)}
+                >
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {/* Backsplash Tile */}
+                      <div>
+                        <h5 className="text-xs font-semibold text-zinc-700 mb-1">Backsplash</h5>
+                        <div className="aspect-square bg-gradient-to-br from-green-100 to-green-200 rounded-lg flex items-center justify-center mb-2">
+                          <div className="text-xs text-green-700 text-center">
+                            {kitchenSet.backsplashTile.series}<br/>{kitchenSet.backsplashTile.code}
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-600 truncate">{kitchenSet.backsplashTile.name}</p>
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          {kitchenSet.backsplashTile.size}
+                        </Badge>
+                      </div>
+                      
+                      {/* Sink */}
+                      <div>
+                        <h5 className="text-xs font-semibold text-zinc-700 mb-1">Sink</h5>
+                        <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center mb-2">
+                          <div className="text-xs text-gray-700 text-center">
+                            {kitchenSet.sinkSpecs.material}<br/>{kitchenSet.sinkSpecs.type}
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-600 truncate">{kitchenSet.sinkSpecs.size}</p>
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          {kitchenSet.sinkSpecs.type}
+                        </Badge>
+                      </div>
+                      
+                      {/* Granite */}
+                      <div>
+                        <h5 className="text-xs font-semibold text-zinc-700 mb-1">Granite</h5>
+                        <div className="aspect-square bg-gradient-to-br from-amber-100 to-amber-200 rounded-lg flex items-center justify-center mb-2">
+                          <div className="text-xs text-amber-700 text-center">
+                            {kitchenSet.graniteRecommendation.color}
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-600 truncate">{kitchenSet.graniteRecommendation.pattern}</p>
+                        <Badge variant="outline" className="text-xs mt-1">
+                          Recommended
+                        </Badge>
+                      </div>
+                    </div>
+                    
+                    <h4 className="text-sm font-semibold text-zinc-800 mb-2">{kitchenSet.name}</h4>
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApplySelectedKitchenSet(kitchenSet);
+                        }}
+                        disabled={appState === AppState.Generating}
+                      >
+                        Apply Set Now
+                      </Button>
+                      {isSelected && (
+                        <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          
+          {selectedKitchenSets.size > 0 && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{selectedKitchenSets.size}</strong> kitchen sets selected for multiple generation
               </p>
             </div>
           )}
@@ -1828,7 +2062,8 @@ ${otherObjectsContext}
       { id: 'manual', label: 'Manual Painter' },
       { 
         id: 'floor', 
-        label: selectedRoomType === 'bathroom' ? 'Bathroom Redesign' : 'Floor Redesign' 
+        label: selectedRoomType === 'bathroom' ? 'Bathroom Redesign' : 
+               selectedRoomType === 'kitchen' ? 'Kitchen Redesign' : 'Floor Redesign' 
       },
       { id: 'themes', label: 'Design Themes' },
       { id: 'placement', label: 'Object Placement' },

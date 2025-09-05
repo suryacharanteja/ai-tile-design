@@ -22,6 +22,25 @@ export interface TileSet {
   roomTypes: string[];
 }
 
+export interface KitchenModularSet {
+  id: string;
+  name: string;
+  backsplashTile: KajariaTile;
+  sinkSpecs: {
+    material: string;
+    size: string;
+    type: string;
+    description: string;
+  };
+  graniteRecommendation: {
+    color: string;
+    pattern: string;
+    description: string;
+    note: string;
+  };
+  roomTypes: string[];
+}
+
 // Kajaria Tile Library based on the knowledge base
 export const kajariaHallBedroomTiles: KajariaTile[] = [
   // SOLITAIRE PLUS Series - 800x1600 mm
@@ -114,6 +133,82 @@ export const bathroomDesignSets: TileSet[] = [
   },
 ];
 
+// Kitchen modular sets
+export const kitchenModularSets: KitchenModularSet[] = [
+  {
+    id: 'stonegres-premium-set-1',
+    name: 'Premium StoneGres Kitchen Set',
+    backsplashTile: kajariaKitchenTiles.find(t => t.code === 'K-16851')!,
+    sinkSpecs: {
+      material: 'Stainless Steel',
+      size: '24" x 18" x 8"',
+      type: 'Single Bowl',
+      description: 'Premium gauge stainless steel sink with sound dampening'
+    },
+    graniteRecommendation: {
+      color: 'Kashmir White',
+      pattern: 'Speckled with cranberry flecks',
+      description: 'Light granite that complements the StoneGres tiles',
+      note: 'Granite/Marble not sold by us - customer procurement required'
+    },
+    roomTypes: ['kitchen']
+  },
+  {
+    id: 'stonegres-modern-set-2',
+    name: 'Modern StoneGres Kitchen Set',
+    backsplashTile: kajariaKitchenTiles.find(t => t.code === 'K-16852')!,
+    sinkSpecs: {
+      material: 'Stainless Steel',
+      size: '30" x 20" x 9"',
+      type: 'Double Bowl',
+      description: 'Large capacity double bowl with divider for efficient workflow'
+    },
+    graniteRecommendation: {
+      color: 'Absolute Black',
+      pattern: 'Solid black with minimal variation',
+      description: 'Bold black granite for modern kitchen aesthetics',
+      note: 'Granite/Marble not sold by us - customer procurement required'
+    },
+    roomTypes: ['kitchen']
+  },
+  {
+    id: 'stonegres-neo-compact-set',
+    name: 'Compact Neo Kitchen Set',
+    backsplashTile: kajariaKitchenTiles.find(t => t.code === 'K 6700')!,
+    sinkSpecs: {
+      material: 'Stainless Steel',
+      size: '22" x 16" x 7"',
+      type: 'Single Bowl Compact',
+      description: 'Space-efficient design perfect for compact Indian kitchens'
+    },
+    graniteRecommendation: {
+      color: 'Tan Brown',
+      pattern: 'Brown and black speckled pattern',
+      description: 'Warm granite that pairs beautifully with Neo series tiles',
+      note: 'Granite/Marble not sold by us - customer procurement required'
+    },
+    roomTypes: ['kitchen']
+  },
+  {
+    id: 'stonegres-neo-elegant-set',
+    name: 'Elegant Neo Kitchen Set',
+    backsplashTile: kajariaKitchenTiles.find(t => t.code === 'K 6701')!,
+    sinkSpecs: {
+      material: 'Stainless Steel',
+      size: '28" x 18" x 8"',
+      type: 'Single Bowl with Drainboard',
+      description: 'Traditional Indian kitchen sink with integrated drainboard'
+    },
+    graniteRecommendation: {
+      color: 'Baltic Brown',
+      pattern: 'Circular brown patterns with gold highlights',
+      description: 'Rich brown granite with distinctive circular patterns',
+      note: 'Granite/Marble not sold by us - customer procurement required'
+    },
+    roomTypes: ['kitchen']
+  },
+];
+
 export const getTilesByRoomType = (roomType: string): KajariaTile[] => {
   switch (roomType) {
     case 'hall-bedroom':
@@ -133,8 +228,16 @@ export const getTileSetsByRoomType = (roomType: string): TileSet[] => {
   switch (roomType) {
     case 'bathroom':
     case 'god-room':
+      return bathroomDesignSets;
+    default:
+      return [];
+  }
+};
+
+export const getKitchenModularSetsByRoomType = (roomType: string): KitchenModularSet[] => {
+  switch (roomType) {
     case 'kitchen':
-      return bathroomDesignSets; // For now, using same sets for all multi-surface rooms
+      return kitchenModularSets;
     default:
       return [];
   }
