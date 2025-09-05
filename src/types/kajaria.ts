@@ -129,12 +129,48 @@ export const getTilesByRoomType = (roomType: string): KajariaTile[] => {
   }
 };
 
+// Kitchen design sets
+export const kitchenDesignSets: TileSet[] = [
+  {
+    id: 'stonegres-plus-kitchen-set',
+    name: 'StoneGres Plus Modern Kitchen Set',
+    floorTile: kajariaKitchenTiles.find(t => t.code === 'K-16851')!,
+    wallTile: kajariaKitchenTiles.find(t => t.code === 'K 6700')!,
+    roomTypes: ['kitchen']
+  },
+  {
+    id: 'stonegres-neo-kitchen-set',
+    name: 'StoneGres Neo Complete Kitchen Set',
+    floorTile: kajariaKitchenTiles.find(t => t.code === '12650')!,
+    wallTile: kajariaKitchenTiles.find(t => t.code === 'K 6701')!,
+    roomTypes: ['kitchen']
+  },
+];
+
+// God room design sets
+export const godRoomDesignSets: TileSet[] = [
+  {
+    id: 'solitaire-light-god-set',
+    name: 'Solitaire Sacred Space Set',
+    floorTile: kajariaGodRoomTiles.find(t => t.code === 'K 8501')!,
+    roomTypes: ['god-room']
+  },
+  {
+    id: 'amazon-light-god-set',
+    name: 'Amazon Divine Collection Set',
+    floorTile: kajariaGodRoomTiles.find(t => t.code === 'K 6401')!,
+    roomTypes: ['god-room']
+  },
+];
+
 export const getTileSetsByRoomType = (roomType: string): TileSet[] => {
   switch (roomType) {
     case 'bathroom':
-    case 'god-room':
+      return bathroomDesignSets;
     case 'kitchen':
-      return bathroomDesignSets; // For now, using same sets for all multi-surface rooms
+      return kitchenDesignSets;
+    case 'god-room':
+      return godRoomDesignSets;
     default:
       return [];
   }
