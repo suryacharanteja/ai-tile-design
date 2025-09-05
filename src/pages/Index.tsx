@@ -818,39 +818,53 @@ ${otherObjectsContext}
   };
 
   const handleGenerateMultipleDesigns = async () => {
-    if (!displayImageUrl || !originalImage || selectedTiles.size === 0) return;
+    if (!displayImageUrl || !originalImage || selectedTiles.size === 0) {
+      toast.error("Please select at least one tile and ensure an image is loaded");
+      return;
+    }
     
     setGeneratingMultiple(true);
     clearError();
     setGeneratedDesigns([]); // Clear previous results
+    setIsGalleryVisible(false); // Hide gallery while generating
     
     const tilesToGenerate = Array.from(selectedTiles).map(tileId => 
       kajariaTiles.find(tile => tile.id === tileId)!
     );
 
     try {
+      console.log(`Starting generation of ${tilesToGenerate.length} designs...`);
+      toast.info(`Generating ${tilesToGenerate.length} designs...`);
+      
       const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
       const newGeneratedDesigns = [];
       
-      for (const tile of tilesToGenerate) {
+      for (let i = 0; i < tilesToGenerate.length; i++) {
+        const tile = tilesToGenerate[i];
+        console.log(`Generating design ${i + 1}/${tilesToGenerate.length}: ${tile.name}`);
+        
         const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
         
         const newImageUrl = await redesignFloor(currentImageFile, prompt);
         newGeneratedDesigns.push({
-          id: `${tile.id}_${Date.now()}`,
+          id: `${tile.id}_${Date.now()}_${i}`,
           imageUrl: newImageUrl,
           tileName: tile.name,
           tileCode: tile.code,
           tileSeries: tile.series
         });
+        
+        console.log(`Completed design ${i + 1}/${tilesToGenerate.length}`);
       }
       
+      console.log(`All designs generated! Total: ${newGeneratedDesigns.length}`);
       setGeneratedDesigns(newGeneratedDesigns);
       setIsGalleryVisible(true);
-      toast.success(`Generated ${newGeneratedDesigns.length} designs!`);
+      toast.success(`Generated ${newGeneratedDesigns.length} designs! Check the gallery below.`);
       
     } catch (error) {
-      console.error(error);
+      console.error("Error in handleGenerateMultipleDesigns:", error);
+      toast.error(`Failed to generate designs: ${error instanceof Error ? error.message : "Unknown error"}`);
       setErrorMessage(error instanceof Error ? error.message : "An error occurred during multiple design generation.");
     } finally {
       setGeneratingMultiple(false);
@@ -858,35 +872,49 @@ ${otherObjectsContext}
   };
 
   const handleGenerateAllDesigns = async () => {
-    if (!displayImageUrl || !originalImage) return;
+    if (!displayImageUrl || !originalImage) {
+      toast.error("Please ensure an image is loaded before generating designs");
+      return;
+    }
     
     setGeneratingMultiple(true);
     clearError();
     setGeneratedDesigns([]); // Clear previous results
+    setIsGalleryVisible(false); // Hide gallery while generating
     
     try {
+      console.log(`Starting generation of all ${kajariaTiles.length} designs...`);
+      toast.info(`Generating all ${kajariaTiles.length} designs...`);
+      
       const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
       const newGeneratedDesigns = [];
       
-      for (const tile of kajariaTiles) {
+      for (let i = 0; i < kajariaTiles.length; i++) {
+        const tile = kajariaTiles[i];
+        console.log(`Generating design ${i + 1}/${kajariaTiles.length}: ${tile.name}`);
+        
         const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
         
         const newImageUrl = await redesignFloor(currentImageFile, prompt);
         newGeneratedDesigns.push({
-          id: `${tile.id}_${Date.now()}`,
+          id: `${tile.id}_${Date.now()}_${i}`,
           imageUrl: newImageUrl,
           tileName: tile.name,
           tileCode: tile.code,
           tileSeries: tile.series
         });
+        
+        console.log(`Completed design ${i + 1}/${kajariaTiles.length}`);
       }
       
+      console.log(`All designs generated! Total: ${newGeneratedDesigns.length}`);
       setGeneratedDesigns(newGeneratedDesigns);
       setIsGalleryVisible(true);
-      toast.success(`Generated ${newGeneratedDesigns.length} designs!`);
+      toast.success(`Generated ${newGeneratedDesigns.length} designs! Check the gallery below.`);
       
     } catch (error) {
-      console.error(error);
+      console.error("Error in handleGenerateAllDesigns:", error);
+      toast.error(`Failed to generate designs: ${error instanceof Error ? error.message : "Unknown error"}`);
       setErrorMessage(error instanceof Error ? error.message : "An error occurred during all designs generation.");
     } finally {
       setGeneratingMultiple(false);
