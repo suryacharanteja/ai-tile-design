@@ -793,7 +793,8 @@ ${otherObjectsContext}
     const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
 
     try {
-      const newImageUrl = await redesignFloor(originalImage, prompt);
+      const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+      const newImageUrl = await redesignFloor(currentImageFile, prompt);
       setDisplayImageUrl(newImageUrl);
       updateHistory(newImageUrl);
       setAppState(AppState.Editing);
