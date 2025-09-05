@@ -63,22 +63,32 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
     const imagePart = await fileToPart(imageFile);
 
     const prompt = `
-        You are an expert computer vision model specializing in semantic segmentation for interior design applications. Your task is to act as a meticulous scene parser. Analyze the provided room image to identify and delineate every individual paintable surface and distinct object. The primary goal is to enable a user to select any single element (like a wall, a window frame, or a piece of furniture) for modification without affecting adjacent or overlapping items.
+        You are an expert computer vision model specializing in semantic segmentation for interior design applications. Your task is to act as a meticulous scene parser with enhanced object detection capabilities. Analyze the provided room image to identify and delineate every individual paintable surface and distinct object with precise spatial awareness.
 
-        **Core Directive: Precise Segmentation of Composite Surfaces**
+        **Core Directive: Enhanced Spatial Object Detection**
 
-        Your most critical function is to deconstruct composite surfaces into their constituent parts. Do not group elements.
+        Your primary function is to identify main structural elements with spatial orientation awareness:
 
-        1.  **Wall and Window Separation:** A wall that contains a window must be identified as **two separate and distinct objects**:
-            *   One object for the 'wall' itself.
-            *   A second, separate object for the 'window'.
+        1.  **Enhanced Wall Detection:** Identify walls by their spatial position:
+            *   "Left wall" - The wall surface on the left side of the image
+            *   "Right wall" - The wall surface on the right side of the image  
+            *   "Back wall" - The rear wall surface (typically the farthest wall)
+            *   "Front wall" - Any visible front wall surface
+
+        2.  **Key Structural Elements:** Always detect these main objects when present:
+            *   "Floor" - The entire floor surface
+            *   "Ceiling" - The ceiling surface
+            *   "Window" - Any windows (specify location like "Window on left wall")
+            *   "Door" - Any doors (specify location like "Door on right wall")
+
+        3.  **Composite Surface Separation:** A wall that contains a window must be identified as **two separate and distinct objects**:
+            *   One object for the 'wall' itself (e.g., "Left wall").
+            *   A second, separate object for the 'window' (e.g., "Window on left wall").
             *   **NEVER** label them as a single 'wall with window'.
 
-        2.  **Wall and Fixture Separation:** Similarly, a wall with a picture frame, a light switch, or a mirror must be segmented into:
-            *   The 'wall'.
-            *   The 'picture frame' (as its own object).
-            *   The 'light switch' (as its own object).
-            *   The 'mirror' (as its own object).
+        4.  **Wall and Fixture Separation:** Similarly, a wall with fixtures must be segmented into:
+            *   The 'wall' (e.g., "Back wall").
+            *   Individual fixtures (e.g., "Picture frame on back wall", "Light switch on left wall").
 
         **Bounding Box Logic:**
         - The bounding box for a larger surface (like a wall) must encompass the entire visible area of that surface.
@@ -86,18 +96,18 @@ export const detectObjects = async (imageFile: File): Promise<DetectedObject[]> 
 
         **Categorization Rules:**
 
-        - **'interior'**: This category is exclusively for major, non-movable architectural elements. This includes all "Walls", the "Floor", the "Ceiling", "Windows", "Doors", and fixed trim like "baseboards" or "crown molding".
+        - **'interior'**: This category is exclusively for major, non-movable architectural elements. This includes "Left wall", "Right wall", "Back wall", "Front wall", "Floor", "Ceiling", "Window", "Door", and fixed trim like "baseboards" or "crown molding".
         - **'furniture'**: This category is for all other items. This includes furniture (sofa, table), decor (rug, wall art, mirror), and fixtures (lamps, light switches).
 
         **Output Requirements:**
 
         For each identified item, provide the following in a JSON object:
-        1.  **'name'**: A specific, descriptive name. Use location for clarity (e.g., "Back wall", "Window on back wall", "Left baseboard").
-        2.  **'is_primary'**: \`true\` for the single most dominant object in each category (e.g., the largest wall, the main sofa), otherwise \`false\`.
+        1.  **'name'**: A specific, descriptive name using spatial orientation (e.g., "Left wall", "Right wall", "Back wall", "Floor", "Window on back wall").
+        2.  **'is_primary'**: \`true\` for the single most dominant object in each category (e.g., the largest wall, the floor), otherwise \`false\`.
         3.  **'category'**: Strictly 'interior' or 'furniture' based on the rules above.
         4.  **'bounding_box'**: A precise, normalized bounding box \`{x_min, y_min, x_max, y_max}\` for each object.
 
-        Your final output must be a single JSON object with the key "objects", containing an array of these structured descriptions. The accuracy of your segmentation is paramount.
+        Your final output must be a single JSON object with the key "objects", containing an array of these structured descriptions. The accuracy of your spatial-aware segmentation is paramount.
     `;
     
     try {

@@ -175,6 +175,8 @@ const Index: React.FC = () => {
   const [selectedFurnitureSet, setSelectedFurnitureSet] = useState<FurnitureSet | null>(null);
   const [isDetectingFurniture, setIsDetectingFurniture] = useState(false);
   const [uploadStep, setUploadStep] = useState<'upload' | 'detect' | 'select' | 'place'>('upload');
+  const [selectedTiles, setSelectedTiles] = useState<Set<string>>(new Set());
+  const [generatingMultiple, setGeneratingMultiple] = useState(false);
 
   const beforeImageRef = useRef<HTMLImageElement>(null);
   const afterImageRef = useRef<HTMLImageElement>(null);
@@ -197,6 +199,8 @@ const Index: React.FC = () => {
     setDetectedObjects([]);
     setHistory([]);
     setHistoryIndex(-1);
+    setSelectedTiles(new Set());
+    setGeneratingMultiple(false);
   };
 
   const handleStartOver = useCallback(() => {
@@ -231,6 +235,8 @@ const Index: React.FC = () => {
     setSelectedFurnitureSet(null);
     setIsDetectingFurniture(false);
     setUploadStep('upload');
+    setSelectedTiles(new Set());
+    setGeneratingMultiple(false);
   }, []);
 
   const handleFileSelect = async (file: File) => {
@@ -765,7 +771,108 @@ ${otherObjectsContext}
       );
   };
   
+  const handleTileSelect = (tile: KajariaTile) => {
+    if (selectedRoomType !== 'hall-bedroom') return; // Only for hall-bedroom
+    
+    if (selectedTiles.has(tile.id)) {
+      const newSelectedTiles = new Set(selectedTiles);
+      newSelectedTiles.delete(tile.id);
+      setSelectedTiles(newSelectedTiles);
+    } else {
+      const newSelectedTiles = new Set(selectedTiles);
+      newSelectedTiles.add(tile.id);
+      setSelectedTiles(newSelectedTiles);
+    }
+  };
+
+  const handleApplySelectedTile = async (tile: KajariaTile) => {
+    if (!displayImageUrl || !originalImage) return;
+    clearError();
+    setAppState(AppState.Generating);
+
+    const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
+
+    try {
+      const newImageUrl = await redesignFloor(originalImage, prompt);
+      setDisplayImageUrl(newImageUrl);
+      updateHistory(newImageUrl);
+      setAppState(AppState.Editing);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "An unknown error occurred during floor redesign.");
+      setAppState(AppState.Editing);
+    }
+  };
+
+  const handleGenerateMultipleDesigns = async () => {
+    if (!displayImageUrl || !originalImage || selectedTiles.size === 0) return;
+    
+    setGeneratingMultiple(true);
+    clearError();
+    
+    const tilesToGenerate = Array.from(selectedTiles).map(tileId => 
+      kajariaTiles.find(tile => tile.id === tileId)!
+    );
+
+    try {
+      const generatedImages: string[] = [];
+      
+      for (const tile of tilesToGenerate) {
+        const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
+        
+        const newImageUrl = await redesignFloor(originalImage, prompt);
+        generatedImages.push(newImageUrl);
+      }
+      
+      // For now, just set the last generated image as display
+      // In a full implementation, you'd want to show a gallery of all generated images
+      if (generatedImages.length > 0) {
+        setDisplayImageUrl(generatedImages[generatedImages.length - 1]);
+        updateHistory(generatedImages[generatedImages.length - 1]);
+      }
+      
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "An error occurred during multiple design generation.");
+    } finally {
+      setGeneratingMultiple(false);
+    }
+  };
+
+  const handleGenerateAllDesigns = async () => {
+    if (!displayImageUrl || !originalImage) return;
+    
+    setGeneratingMultiple(true);
+    clearError();
+    
+    try {
+      const generatedImages: string[] = [];
+      
+      for (const tile of kajariaTiles) {
+        const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
+        
+        const newImageUrl = await redesignFloor(originalImage, prompt);
+        generatedImages.push(newImageUrl);
+      }
+      
+      // For now, just set the last generated image as display
+      // In a full implementation, you'd want to show a gallery of all generated images
+      if (generatedImages.length > 0) {
+        setDisplayImageUrl(generatedImages[generatedImages.length - 1]);
+        updateHistory(generatedImages[generatedImages.length - 1]);
+      }
+      
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "An error occurred during all designs generation.");
+    } finally {
+      setGeneratingMultiple(false);
+    }
+  };
+
   const renderFloorRedesign = () => {
+    if (selectedRoomType !== 'hall-bedroom') {
+      // Keep the original logic for other room types
       return (
           <div className="space-y-4">
               <h3 className="text-lg font-bold text-zinc-800 mb-1">1. Choose a Floor Texture</h3>
@@ -792,6 +899,92 @@ ${otherObjectsContext}
               })}
           </div>
       );
+    }
+
+    // New logic for Hall & Bedroom with Kajaria tiles
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-bold text-zinc-800 mb-1">Kajaria Tiles for Hall & Bedroom</h3>
+        <p className="text-sm text-zinc-600 mb-4">Select tiles to apply to your floor. Choose multiple tiles for batch generation.</p>
+        
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <Button 
+            onClick={handleGenerateMultipleDesigns}
+            disabled={selectedTiles.size === 0 || generatingMultiple}
+            variant="outline"
+            className="flex items-center gap-2"
+          >
+            <Wand2 className="w-4 h-4" />
+            {generatingMultiple ? 'Generating...' : `Generate Selected (${selectedTiles.size})`}
+          </Button>
+          <Button 
+            onClick={handleGenerateAllDesigns}
+            disabled={generatingMultiple}
+            className="flex items-center gap-2"
+          >
+            <Wand2 className="w-4 h-4" />
+            {generatingMultiple ? 'Generating...' : 'Generate All Designs'}
+          </Button>
+        </div>
+
+        {/* Tiles Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {kajariaTiles.map(tile => {
+            const isSelected = selectedTiles.has(tile.id);
+            return (
+              <Card 
+                key={tile.id} 
+                className={`cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+                onClick={() => handleTileSelect(tile)}
+              >
+                <CardContent className="p-3">
+                  <div className="aspect-square bg-gradient-to-br from-zinc-100 to-zinc-200 rounded-lg mb-2 flex items-center justify-center">
+                    <div className="text-xs text-zinc-500 text-center">
+                      {tile.series}<br/>{tile.code}
+                    </div>
+                  </div>
+                  <h4 className="text-sm font-semibold text-zinc-800 truncate">{tile.name}</h4>
+                  <p className="text-xs text-zinc-600">{tile.code}</p>
+                  <Badge variant="secondary" className="text-xs mt-1">
+                    {tile.size}
+                  </Badge>
+                  <div className="mt-2 flex gap-1">
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      className="flex-1 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleApplySelectedTile(tile);
+                      }}
+                      disabled={appState === AppState.Generating}
+                    >
+                      Apply Now
+                    </Button>
+                    {isSelected && (
+                      <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+        
+        {selectedTiles.size > 0 && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>{selectedTiles.size}</strong> tiles selected for multiple generation
+            </p>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const renderDesignThemes = () => {
