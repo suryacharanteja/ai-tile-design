@@ -7,6 +7,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { modifyImage, getDesignThemes, DetectedObject, DesignTheme, detectObjects, redesignFloor, placeObject } from '../services/geminiService';
 import { detectFurnitureSets, FurnitureSet } from '../services/furnitureDetectionService';
 import Header from '../components/Header';
+import RoomTypeSelector from '../components/RoomTypeSelector';
 import ImageUploader from '../components/ImageUploader';
 import Spinner from '../components/Spinner';
 import DebugModal from '../components/DebugModal';
@@ -17,6 +18,12 @@ import ColorPickerPopover from '../components/ColorPickerPopover';
 import FurnitureSetCard from '../components/FurnitureSetCard';
 import { Textarea } from '../components/ui/textarea';
 import Footer from '../components/Footer';
+import { getTilesByRoomType, KajariaTile } from '../types/kajaria';
+import { Card, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { ScrollArea } from '../components/ui/scroll-area';
+import { ArrowLeft, Eye, Download, Wand2 } from 'lucide-react';
 
 enum AppState {
   Initial,
@@ -125,6 +132,9 @@ const getLoadingMessage = (activeTab: EditorTab, objectToRemove?: any, placement
 };
 
 const Index: React.FC = () => {
+  const [currentView, setCurrentView] = useState<'dashboard' | 'visualizer'>('dashboard');
+  const [selectedRoomType, setSelectedRoomType] = useState<string>('');
+  const [kajariaTiles, setKajariaTiles] = useState<KajariaTile[]>([]);
   const [appState, setAppState] = useState<AppState>(AppState.Initial);
   const [originalImage, setOriginalImage] = useState<File | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
@@ -171,6 +181,24 @@ const Index: React.FC = () => {
 
   const clearError = () => setErrorMessage(null);
   
+  const handleRoomTypeSelect = (roomType: string) => {
+    setSelectedRoomType(roomType);
+    setKajariaTiles(getTilesByRoomType(roomType));
+    setCurrentView('visualizer');
+  };
+
+  const handleBackToDashboard = () => {
+    setCurrentView('dashboard');
+    setSelectedRoomType('');
+    setAppState(AppState.Initial);
+    setOriginalImage(null);
+    setOriginalImageUrl(null);
+    setDisplayImageUrl(null);
+    setDetectedObjects([]);
+    setHistory([]);
+    setHistoryIndex(-1);
+  };
+
   const handleStartOver = useCallback(() => {
     setAppState(AppState.Initial);
     setOriginalImage(null);
@@ -1353,13 +1381,103 @@ ${otherObjectsContext}
     );
   };
   
+  if (currentView === 'dashboard') {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <Header />
+          <main className="mt-12">
+            <RoomTypeSelector onRoomTypeSelect={handleRoomTypeSelect} />
+          </main>
+          <Footer />
+        </div>
+      </div>
+    );
+  }
+
   if (appState === AppState.Initial) {
     return (
-      <div className="container mx-auto p-4 flex flex-col items-center">
-        <Header />
-        <div className="w-full max-w-2xl mt-8">
-            <ImageUploader id="main-uploader" onFileSelect={handleFileSelect} imageUrl={originalImageUrl} />
-            {errorMessage && <p className="text-red-500 mt-4 text-center">{errorMessage}</p>}
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center gap-4 mb-6">
+            <Button
+              variant="outline"
+              onClick={handleBackToDashboard}
+              className="flex items-center gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back to Dashboard
+            </Button>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{selectedRoomType.replace('-', ' ').toUpperCase()}</Badge>
+              <h2 className="text-xl font-semibold">TileVision AI Visualizer</h2>
+            </div>
+          </div>
+          
+          <main>
+            <div className="grid lg:grid-cols-[1fr,400px] gap-8 items-start">
+              <Card className="border-dashed border-2 border-muted-foreground/25">
+                <CardContent className="p-6">
+                  <ImageUploader id="main-uploader" onFileSelect={handleFileSelect} imageUrl={originalImageUrl} />
+                  {errorMessage && <p className="text-red-500 mt-4 text-center">{errorMessage}</p>}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-foreground">
+                      Kajaria Tile Collection
+                    </h3>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      disabled={true}
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      Generate All Designs
+                    </Button>
+                  </div>
+                  
+                  <ScrollArea className="h-96">
+                    <div className="space-y-4">
+                      {kajariaTiles.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p>Upload an image to see available tiles.</p>
+                        </div>
+                      ) : (
+                        kajariaTiles.map((tile) => (
+                          <Card key={tile.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-50">
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                                  <span className="text-xs text-muted-foreground">Preview</span>
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-sm">{tile.name}</h4>
+                                  <p className="text-xs text-muted-foreground">{tile.series}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Badge variant="outline" className="text-xs">
+                                      {tile.code}
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {tile.size}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            </div>
+          </main>
+          <Footer />
         </div>
       </div>
     );
