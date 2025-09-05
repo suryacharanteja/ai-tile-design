@@ -18,7 +18,7 @@ import ColorPickerPopover from '../components/ColorPickerPopover';
 import FurnitureSetCard from '../components/FurnitureSetCard';
 import { Textarea } from '../components/ui/textarea';
 import Footer from '../components/Footer';
-import { getTilesByRoomType, KajariaTile } from '../types/kajaria';
+import { getTilesByRoomType, getTileSetsByRoomType, KajariaTile, TileSet } from '../types/kajaria';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -178,6 +178,7 @@ const Index: React.FC = () => {
   const [isDetectingFurniture, setIsDetectingFurniture] = useState(false);
   const [uploadStep, setUploadStep] = useState<'upload' | 'detect' | 'select' | 'place'>('upload');
   const [selectedTiles, setSelectedTiles] = useState<Set<string>>(new Set());
+  const [selectedTileSets, setSelectedTileSets] = useState<Set<string>>(new Set());
   const [generatingMultiple, setGeneratingMultiple] = useState(false);
   const [generatedDesigns, setGeneratedDesigns] = useState<Array<{
     id: string;
@@ -210,6 +211,7 @@ const Index: React.FC = () => {
     setHistory([]);
     setHistoryIndex(-1);
     setSelectedTiles(new Set());
+    setSelectedTileSets(new Set());
     setGeneratingMultiple(false);
   };
 
@@ -246,6 +248,7 @@ const Index: React.FC = () => {
     setIsDetectingFurniture(false);
     setUploadStep('upload');
     setSelectedTiles(new Set());
+    setSelectedTileSets(new Set());
     setGeneratingMultiple(false);
     setGeneratedDesigns([]);
     setIsGalleryVisible(false);
@@ -797,6 +800,20 @@ ${otherObjectsContext}
     }
   };
 
+  const handleTileSetSelect = (tileSet: TileSet) => {
+    if (selectedRoomType !== 'bathroom') return; // Only for bathroom
+    
+    if (selectedTileSets.has(tileSet.id)) {
+      const newSelectedTileSets = new Set(selectedTileSets);
+      newSelectedTileSets.delete(tileSet.id);
+      setSelectedTileSets(newSelectedTileSets);
+    } else {
+      const newSelectedTileSets = new Set(selectedTileSets);
+      newSelectedTileSets.add(tileSet.id);
+      setSelectedTileSets(newSelectedTileSets);
+    }
+  };
+
   const handleApplySelectedTile = async (tile: KajariaTile) => {
     if (!displayImageUrl || !originalImage) return;
     clearError();
@@ -817,7 +834,95 @@ ${otherObjectsContext}
     }
   };
 
+  const handleApplySelectedTileSet = async (tileSet: TileSet) => {
+    if (!displayImageUrl || !originalImage) return;
+    clearError();
+    setAppState(AppState.Generating);
+
+    const floorTile = tileSet.floorTile;
+    const wallTile = tileSet.wallTile;
+    
+    const prompt = wallTile 
+      ? `Replace both the floor and walls in this bathroom image. Apply a photorealistic ${floorTile.name} tile pattern (${floorTile.series} series, code ${floorTile.code}, size ${floorTile.size}) to the floor area, and apply a photorealistic ${wallTile.name} tile pattern (${wallTile.series} series, code ${wallTile.code}, size ${wallTile.size}) to all visible wall surfaces. Preserve all other elements of the bathroom exactly as they are. Both tile patterns should look natural and realistic with proper lighting and perspective that matches the bathroom's existing conditions.`
+      : `Replace the floor in this bathroom image with a photorealistic ${floorTile.name} tile pattern. The tile is from the ${floorTile.series} series, code ${floorTile.code}, size ${floorTile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the bathroom exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
+
+    try {
+      const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+      const newImageUrl = await redesignFloor(currentImageFile, prompt);
+      setDisplayImageUrl(newImageUrl);
+      updateHistory(newImageUrl);
+      setAppState(AppState.Editing);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "An unknown error occurred during bathroom redesign.");
+      setAppState(AppState.Editing);
+    }
+  };
+
   const handleGenerateMultipleDesigns = async () => {
+    if (selectedRoomType === 'bathroom') {
+      // Handle bathroom tile sets
+      if (!displayImageUrl || !originalImage || selectedTileSets.size === 0) {
+        toast.error("Please select at least one tile set and ensure an image is loaded");
+        return;
+      }
+      
+      setGeneratingMultiple(true);
+      clearError();
+      setGeneratedDesigns([]);
+      setIsGalleryVisible(false);
+      
+      const tileSets = getTileSetsByRoomType(selectedRoomType);
+      const tileSetsToGenerate = Array.from(selectedTileSets).map(tileSetId => 
+        tileSets.find(tileSet => tileSet.id === tileSetId)!
+      );
+
+      try {
+        console.log(`Starting generation of ${tileSetsToGenerate.length} bathroom designs...`);
+        toast.info(`Generating ${tileSetsToGenerate.length} bathroom designs...`);
+        
+        const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+        const newGeneratedDesigns = [];
+        
+        for (let i = 0; i < tileSetsToGenerate.length; i++) {
+          const tileSet = tileSetsToGenerate[i];
+          console.log(`Generating design ${i + 1}/${tileSetsToGenerate.length}: ${tileSet.name}`);
+          
+          const floorTile = tileSet.floorTile;
+          const wallTile = tileSet.wallTile;
+          
+          const prompt = wallTile 
+            ? `Replace both the floor and walls in this bathroom image. Apply a photorealistic ${floorTile.name} tile pattern (${floorTile.series} series, code ${floorTile.code}, size ${floorTile.size}) to the floor area, and apply a photorealistic ${wallTile.name} tile pattern (${wallTile.series} series, code ${wallTile.code}, size ${wallTile.size}) to all visible wall surfaces. Preserve all other elements of the bathroom exactly as they are. Both tile patterns should look natural and realistic with proper lighting and perspective.`
+            : `Replace the floor in this bathroom image with a photorealistic ${floorTile.name} tile pattern. The tile is from the ${floorTile.series} series, code ${floorTile.code}, size ${floorTile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the bathroom exactly as they are.`;
+          
+          const newImageUrl = await redesignFloor(currentImageFile, prompt);
+          newGeneratedDesigns.push({
+            id: `${tileSet.id}_${Date.now()}_${i}`,
+            imageUrl: newImageUrl,
+            tileName: tileSet.name,
+            tileCode: `${floorTile.code}${wallTile ? ' + ' + wallTile.code : ''}`,
+            tileSeries: `${floorTile.series}${wallTile ? ' + ' + wallTile.series : ''}`
+          });
+          
+          console.log(`Completed design ${i + 1}/${tileSetsToGenerate.length}`);
+        }
+        
+        console.log(`All bathroom designs generated! Total: ${newGeneratedDesigns.length}`);
+        setGeneratedDesigns(newGeneratedDesigns);
+        setIsGalleryVisible(true);
+        toast.success(`Generated ${newGeneratedDesigns.length} bathroom designs! Check the gallery below.`);
+        
+      } catch (error) {
+        console.error("Error in handleGenerateMultipleDesigns:", error);
+        toast.error(`Failed to generate designs: ${error instanceof Error ? error.message : "Unknown error"}`);
+        setErrorMessage(error instanceof Error ? error.message : "An error occurred during multiple design generation.");
+      } finally {
+        setGeneratingMultiple(false);
+      }
+      return;
+    }
+
+    // Handle individual tiles for hall-bedroom
     if (!displayImageUrl || !originalImage || selectedTiles.size === 0) {
       toast.error("Please select at least one tile and ensure an image is loaded");
       return;
@@ -825,8 +930,8 @@ ${otherObjectsContext}
     
     setGeneratingMultiple(true);
     clearError();
-    setGeneratedDesigns([]); // Clear previous results
-    setIsGalleryVisible(false); // Hide gallery while generating
+    setGeneratedDesigns([]);
+    setIsGalleryVisible(false);
     
     const tilesToGenerate = Array.from(selectedTiles).map(tileId => 
       kajariaTiles.find(tile => tile.id === tileId)!
@@ -879,9 +984,59 @@ ${otherObjectsContext}
     
     setGeneratingMultiple(true);
     clearError();
-    setGeneratedDesigns([]); // Clear previous results
-    setIsGalleryVisible(false); // Hide gallery while generating
+    setGeneratedDesigns([]);
+    setIsGalleryVisible(false);
     
+    if (selectedRoomType === 'bathroom') {
+      // Handle bathroom tile sets
+      const tileSets = getTileSetsByRoomType(selectedRoomType);
+      
+      try {
+        console.log(`Starting generation of all ${tileSets.length} bathroom design sets...`);
+        toast.info(`Generating all ${tileSets.length} bathroom design sets...`);
+        
+        const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+        const newGeneratedDesigns = [];
+        
+        for (let i = 0; i < tileSets.length; i++) {
+          const tileSet = tileSets[i];
+          console.log(`Generating design ${i + 1}/${tileSets.length}: ${tileSet.name}`);
+          
+          const floorTile = tileSet.floorTile;
+          const wallTile = tileSet.wallTile;
+          
+          const prompt = wallTile 
+            ? `Replace both the floor and walls in this bathroom image. Apply a photorealistic ${floorTile.name} tile pattern (${floorTile.series} series, code ${floorTile.code}, size ${floorTile.size}) to the floor area, and apply a photorealistic ${wallTile.name} tile pattern (${wallTile.series} series, code ${wallTile.code}, size ${wallTile.size}) to all visible wall surfaces. Preserve all other elements of the bathroom exactly as they are. Both tile patterns should look natural and realistic with proper lighting and perspective.`
+            : `Replace the floor in this bathroom image with a photorealistic ${floorTile.name} tile pattern. The tile is from the ${floorTile.series} series, code ${floorTile.code}, size ${floorTile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the bathroom exactly as they are.`;
+          
+          const newImageUrl = await redesignFloor(currentImageFile, prompt);
+          newGeneratedDesigns.push({
+            id: `${tileSet.id}_${Date.now()}_${i}`,
+            imageUrl: newImageUrl,
+            tileName: tileSet.name,
+            tileCode: `${floorTile.code}${wallTile ? ' + ' + wallTile.code : ''}`,
+            tileSeries: `${floorTile.series}${wallTile ? ' + ' + wallTile.series : ''}`
+          });
+          
+          console.log(`Completed design ${i + 1}/${tileSets.length}`);
+        }
+        
+        console.log(`All bathroom designs generated! Total: ${newGeneratedDesigns.length}`);
+        setGeneratedDesigns(newGeneratedDesigns);
+        setIsGalleryVisible(true);
+        toast.success(`Generated ${newGeneratedDesigns.length} bathroom designs! Check the gallery below.`);
+        
+      } catch (error) {
+        console.error("Error in handleGenerateAllDesigns:", error);
+        toast.error(`Failed to generate designs: ${error instanceof Error ? error.message : "Unknown error"}`);
+        setErrorMessage(error instanceof Error ? error.message : "An error occurred during all bathroom designs generation.");
+      } finally {
+        setGeneratingMultiple(false);
+      }
+      return;
+    }
+
+    // Handle individual tiles for hall-bedroom
     try {
       console.log(`Starting generation of all ${kajariaTiles.length} designs...`);
       toast.info(`Generating all ${kajariaTiles.length} designs...`);
@@ -922,6 +1077,119 @@ ${otherObjectsContext}
   };
 
   const renderFloorRedesign = () => {
+    if (selectedRoomType === 'bathroom') {
+      // Bathroom tile sets logic
+      const bathroomTileSets = getTileSetsByRoomType(selectedRoomType);
+      
+      return (
+        <div className="space-y-4">
+          <h3 className="text-lg font-bold text-zinc-800 mb-1">Kajaria Bathroom Design Sets</h3>
+          <p className="text-sm text-zinc-600 mb-4">Select tile sets (floor + wall combinations) for your bathroom. Choose multiple sets for batch generation.</p>
+          
+          {/* Action Buttons */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <Button 
+              onClick={handleGenerateMultipleDesigns}
+              disabled={selectedTileSets.size === 0 || generatingMultiple}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Wand2 className="w-4 h-4" />
+              {generatingMultiple ? 'Generating...' : `Generate Selected (${selectedTileSets.size})`}
+            </Button>
+            <Button 
+              onClick={handleGenerateAllDesigns}
+              disabled={generatingMultiple}
+              className="flex items-center gap-2"
+            >
+              <Wand2 className="w-4 h-4" />
+              {generatingMultiple ? 'Generating...' : 'Generate All Designs'}
+            </Button>
+          </div>
+
+          {/* Tile Sets Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {bathroomTileSets.map(tileSet => {
+              const isSelected = selectedTileSets.has(tileSet.id);
+              return (
+                <Card 
+                  key={tileSet.id} 
+                  className={`cursor-pointer transition-all duration-200 hover:shadow-md ${isSelected ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+                  onClick={() => handleTileSetSelect(tileSet)}
+                >
+                  <CardContent className="p-4">
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      {/* Floor Tile */}
+                      <div>
+                        <h5 className="text-xs font-semibold text-zinc-700 mb-1">Floor Tile</h5>
+                        <div className="aspect-square bg-gradient-to-br from-amber-100 to-amber-200 rounded-lg flex items-center justify-center mb-2">
+                          <div className="text-xs text-amber-700 text-center">
+                            {tileSet.floorTile.series}<br/>{tileSet.floorTile.code}
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-600 truncate">{tileSet.floorTile.name}</p>
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          {tileSet.floorTile.size}
+                        </Badge>
+                      </div>
+                      
+                      {/* Wall Tile */}
+                      {tileSet.wallTile && (
+                        <div>
+                          <h5 className="text-xs font-semibold text-zinc-700 mb-1">Wall Tile</h5>
+                          <div className="aspect-square bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center mb-2">
+                            <div className="text-xs text-blue-700 text-center">
+                              {tileSet.wallTile.series}<br/>{tileSet.wallTile.code}
+                            </div>
+                          </div>
+                          <p className="text-xs text-zinc-600 truncate">{tileSet.wallTile.name}</p>
+                          <Badge variant="secondary" className="text-xs mt-1">
+                            {tileSet.wallTile.size}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <h4 className="text-sm font-semibold text-zinc-800 mb-2">{tileSet.name}</h4>
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleApplySelectedTileSet(tileSet);
+                        }}
+                        disabled={appState === AppState.Generating}
+                      >
+                        Apply Set Now
+                      </Button>
+                      {isSelected && (
+                        <div className="w-6 h-6 bg-blue-500 rounded flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          
+          {selectedTileSets.size > 0 && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{selectedTileSets.size}</strong> tile sets selected for multiple generation
+              </p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (selectedRoomType !== 'hall-bedroom') {
       // Keep the original logic for other room types
       return (
@@ -1558,7 +1826,10 @@ ${otherObjectsContext}
 
     const TABS: { id: EditorTab; label: string }[] = [
       { id: 'manual', label: 'Manual Painter' },
-      { id: 'floor', label: 'Floor Redesign' },
+      { 
+        id: 'floor', 
+        label: selectedRoomType === 'bathroom' ? 'Bathroom Redesign' : 'Floor Redesign' 
+      },
       { id: 'themes', label: 'Design Themes' },
       { id: 'placement', label: 'Object Placement' },
     ];
