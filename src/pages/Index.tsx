@@ -1487,10 +1487,10 @@ ${otherObjectsContext}
     return (
       <div className="container mx-auto p-4 flex flex-col items-center justify-center text-center" style={{ minHeight: '90vh' }}>
         <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight text-zinc-800">
-          Room Painter AI
+          TileVision AI
         </h1>
         <p className="mt-4 text-lg text-zinc-600 max-w-3xl mx-auto">
-          Transform your living space with AI-powered interior design. Upload a photo of your room and watch as our intelligent system identifies objects and suggests beautiful color schemes.
+          Premium AI visualization tool for showrooms. Show customers exactly how our tiles will transform their spaces.
         </p>
         <button 
           onClick={handleStartOver} 
