@@ -18,15 +18,12 @@ import ColorPickerPopover from '../components/ColorPickerPopover';
 import FurnitureSetCard from '../components/FurnitureSetCard';
 import { Textarea } from '../components/ui/textarea';
 import Footer from '../components/Footer';
-import { getTilesByRoomType, getTileSetsByRoomType, KajariaTile, TileSet } from '../types/kajaria';
+import { getTilesByRoomType, KajariaTile } from '../types/kajaria';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { ScrollArea } from '../components/ui/scroll-area';
-import { ArrowLeft, Eye, Download, Wand2, Star, Palette } from 'lucide-react';
-import ImageInputModal from '../components/ImageInputModal';
-import ShowcaseGallery from '../components/ShowcaseGallery';
-import TileSetCard from '../components/TileSetCard';
+import { ArrowLeft, Eye, Download, Wand2 } from 'lucide-react';
 
 enum AppState {
   Initial,
@@ -138,14 +135,7 @@ const Index: React.FC = () => {
   const [currentView, setCurrentView] = useState<'dashboard' | 'visualizer'>('dashboard');
   const [selectedRoomType, setSelectedRoomType] = useState<string>('');
   const [kajariaTiles, setKajariaTiles] = useState<KajariaTile[]>([]);
-  const [tileSets, setTileSets] = useState<TileSet[]>([]);
-  const [selectedTileSet, setSelectedTileSet] = useState<TileSet | null>(null);
   const [appState, setAppState] = useState<AppState>(AppState.Initial);
-  const [showImageInputModal, setShowImageInputModal] = useState(false);
-  const [showShowcaseGallery, setShowShowcaseGallery] = useState(false);
-  const [showcaseDesigns, setShowcaseDesigns] = useState<any[]>([]);
-  const [isGeneratingShowcase, setIsGeneratingShowcase] = useState(false);
-  const [wallColor, setWallColor] = useState<string>('#FFFFFF');
   const [originalImage, setOriginalImage] = useState<File | null>(null);
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
@@ -194,9 +184,7 @@ const Index: React.FC = () => {
   const handleRoomTypeSelect = (roomType: string) => {
     setSelectedRoomType(roomType);
     setKajariaTiles(getTilesByRoomType(roomType));
-    setTileSets(getTileSetsByRoomType(roomType));
     setCurrentView('visualizer');
-    setShowImageInputModal(true);
   };
 
   const handleBackToDashboard = () => {
@@ -209,10 +197,6 @@ const Index: React.FC = () => {
     setDetectedObjects([]);
     setHistory([]);
     setHistoryIndex(-1);
-    setShowImageInputModal(false);
-    setShowShowcaseGallery(false);
-    setShowcaseDesigns([]);
-    setSelectedTileSet(null);
   };
 
   const handleStartOver = useCallback(() => {
@@ -258,179 +242,28 @@ const Index: React.FC = () => {
     setAppState(AppState.Detecting);
     setHistory([url]);
     setHistoryIndex(0);
-    setShowImageInputModal(false);
 
     try {
       const objects = await detectObjects(file);
       setDetectedObjects(objects);
       setAppState(AppState.Editing);
 
-      // For simplified workflow, we don't need themes loading
-      // Focus on tile application workflow
+      setThemesLoading(true);
+      try {
+        const themes = await getDesignThemes(file, objects);
+        setDesignThemes(themes);
+        if (themes.length > 0) {
+            setActiveThemeIndex(0); // Open the first theme by default
+        }
+      } catch (themeError) {
+        console.warn("Could not fetch AI design themes:", themeError);
+      } finally {
+        setThemesLoading(false);
+      }
     } catch (error) {
       console.error(error);
       setErrorMessage(error instanceof Error ? error.message : "An unknown error occurred during object detection.");
       setAppState(AppState.Initial); // Revert to initial state on failure
-    }
-  };
-
-  const handleTileApplication = async (tile: KajariaTile) => {
-    if (!displayImageUrl || !originalImage) return;
-    clearError();
-    setAppState(AppState.Generating);
-
-    try {
-      // Apply tile to floor using existing floor redesign logic
-      const floorObjects = detectedObjects.filter(obj => obj.name.toLowerCase().includes('floor'));
-      if (floorObjects.length > 0) {
-        const file = await dataUrlToFile(displayImageUrl, 'current.jpg');
-        const result = await redesignFloor(file, `Apply ${tile.name} (${tile.code}) tile pattern to the floor`);
-        
-        if (result) {
-          setDisplayImageUrl(result);
-          updateHistory(result);
-        }
-      }
-      setAppState(AppState.Editing);
-    } catch (error) {
-      console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : "Failed to apply tile");
-      setAppState(AppState.Editing);
-    }
-  };
-
-  const handleTileSetApplication = async (tileSet: TileSet) => {
-    if (!displayImageUrl || !originalImage) return;
-    clearError();
-    setAppState(AppState.Generating);
-    setSelectedTileSet(tileSet);
-
-    try {
-      // Apply both floor and wall tiles
-      const file = await dataUrlToFile(displayImageUrl, 'current.jpg');
-      const floorPrompt = `Apply ${tileSet.floorTile.name} (${tileSet.floorTile.code}) tile pattern to the floor`;
-      const wallPrompt = tileSet.wallTile ? 
-        `Apply ${tileSet.wallTile.name} (${tileSet.wallTile.code}) tile pattern to the walls` : 
-        '';
-      
-      // Apply floor tile first
-      let result = await redesignFloor(file, floorPrompt);
-      
-      // Apply wall tile if exists
-      if (result && tileSet.wallTile) {
-        const wallFile = await dataUrlToFile(result, 'floor-applied.jpg');
-        const wallObjects = detectedObjects.filter(obj => obj.name.toLowerCase().includes('wall'));
-        if (wallObjects.length > 0) {
-          // Use manual painting for walls
-          result = await modifyImage(wallFile, wallPrompt);
-        }
-      }
-      
-      if (result) {
-        setDisplayImageUrl(result);
-        updateHistory(result);
-      }
-      setAppState(AppState.Editing);
-    } catch (error) {
-      console.error(error);
-      setErrorMessage(error instanceof Error ? error.message : "Failed to apply tile set");
-      setAppState(AppState.Editing);
-    }
-  };
-
-  const handleGenerateAllDesigns = async () => {
-    if (!originalImage || !displayImageUrl) return;
-    
-    setIsGeneratingShowcase(true);
-    const designs: any[] = [];
-    
-    try {
-      if (selectedRoomType === 'hall-bedroom') {
-        // Generate individual tile designs
-        for (const tile of kajariaTiles) {
-          try {
-            const file = await dataUrlToFile(displayImageUrl, 'current.jpg');
-            const result = await redesignFloor(file, `Apply ${tile.name} (${tile.code}) tile pattern to the floor`);
-            
-            if (result) {
-              designs.push({
-                id: tile.id,
-                imageUrl: result,
-                tileName: tile.name,
-                tileCode: tile.code,
-                series: tile.series
-              });
-            }
-          } catch (error) {
-            console.warn(`Failed to generate design for ${tile.name}:`, error);
-          }
-        }
-      } else {
-        // Generate tile set designs for bathroom, kitchen, god-room
-        for (const tileSet of tileSets) {
-          try {
-            const file = await dataUrlToFile(displayImageUrl, 'current.jpg');
-            let result = await redesignFloor(file, `Apply ${tileSet.floorTile.name} tile pattern to the floor`);
-            
-            if (result && tileSet.wallTile) {
-              const wallFile = await dataUrlToFile(result, 'floor-applied.jpg');
-              const wallObjects = detectedObjects.filter(obj => obj.name.toLowerCase().includes('wall'));
-              if (wallObjects.length > 0) {
-                result = await modifyImage(wallFile, `Apply ${tileSet.wallTile.name} tile pattern to the walls`);
-              }
-            }
-            
-            if (result) {
-              designs.push({
-                id: tileSet.id,
-                imageUrl: result,
-                tileName: tileSet.name,
-                tileCode: `${tileSet.floorTile.code}${tileSet.wallTile ? ` + ${tileSet.wallTile.code}` : ''}`,
-                series: tileSet.floorTile.series
-              });
-            }
-          } catch (error) {
-            console.warn(`Failed to generate design for ${tileSet.name}:`, error);
-          }
-        }
-      }
-      
-      setShowcaseDesigns(designs);
-      setShowShowcaseGallery(true);
-    } catch (error) {
-      console.error('Error generating showcase:', error);
-      setErrorMessage('Failed to generate showcase gallery');
-    } finally {
-      setIsGeneratingShowcase(false);
-    }
-  };
-
-  const handleDownloadFavorites = async (favoriteIds: string[]) => {
-    // Implementation for downloading selected designs as ZIP
-    console.log('Downloading favorites:', favoriteIds);
-    // This would typically create a ZIP file with the selected images
-  };
-
-  const handleWallColorChange = async (color: string) => {
-    if (!displayImageUrl || !originalImage) return;
-    setWallColor(color);
-    
-    try {
-      setAppState(AppState.Generating);
-      const file = await dataUrlToFile(displayImageUrl, 'current.jpg');
-      const wallObjects = detectedObjects.filter(obj => obj.name.toLowerCase().includes('wall'));
-      
-      if (wallObjects.length > 0) {
-        const result = await modifyImage(file, `Change wall color to ${color}`);
-        if (result) {
-          setDisplayImageUrl(result);
-          updateHistory(result);
-        }
-      }
-      setAppState(AppState.Editing);
-    } catch (error) {
-      console.error('Error changing wall color:', error);
-      setAppState(AppState.Editing);
     }
   };
 
@@ -1582,32 +1415,70 @@ ${otherObjectsContext}
           </div>
           
           <main>
-            <div className="text-center py-16">
-              <div className="max-w-md mx-auto">
-                <h3 className="text-2xl font-semibold mb-4">Ready to Visualize</h3>
-                <p className="text-muted-foreground mb-8">
-                  Upload your customer's room photo or choose from our professional templates to get started.
-                </p>
-                <Button 
-                  onClick={() => setShowImageInputModal(true)}
-                  size="lg"
-                  className="w-full"
-                >
-                  Choose Image Source
-                </Button>
-              </div>
+            <div className="grid lg:grid-cols-[1fr,400px] gap-8 items-start">
+              <Card className="border-dashed border-2 border-muted-foreground/25">
+                <CardContent className="p-6">
+                  <ImageUploader id="main-uploader" onFileSelect={handleFileSelect} imageUrl={originalImageUrl} />
+                  {errorMessage && <p className="text-red-500 mt-4 text-center">{errorMessage}</p>}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-foreground">
+                      Kajaria Tile Collection
+                    </h3>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="flex items-center gap-2"
+                      disabled={true}
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      Generate All Designs
+                    </Button>
+                  </div>
+                  
+                  <ScrollArea className="h-96">
+                    <div className="space-y-4">
+                      {kajariaTiles.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p>Upload an image to see available tiles.</p>
+                        </div>
+                      ) : (
+                        kajariaTiles.map((tile) => (
+                          <Card key={tile.id} className="cursor-pointer hover:shadow-md transition-shadow opacity-50">
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                                  <span className="text-xs text-muted-foreground">Preview</span>
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-sm">{tile.name}</h4>
+                                  <p className="text-xs text-muted-foreground">{tile.series}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <Badge variant="outline" className="text-xs">
+                                      {tile.code}
+                                    </Badge>
+                                    <Badge variant="secondary" className="text-xs">
+                                      {tile.size}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
             </div>
           </main>
           <Footer />
         </div>
-        
-        {/* Image Input Modal */}
-        <ImageInputModal
-          open={showImageInputModal}
-          onClose={() => setShowImageInputModal(false)}
-          onFileSelect={handleFileSelect}
-          roomType={selectedRoomType}
-        />
       </div>
     );
   }
@@ -1634,154 +1505,21 @@ ${otherObjectsContext}
     );
   }
 
-  // TileVision AI Editing State - Room-specific workflow
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-6">
-          <Button
-            variant="outline"
-            onClick={handleBackToDashboard}
-            className="flex items-center gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Button>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{selectedRoomType.replace('-', ' ').toUpperCase()}</Badge>
-            <h2 className="text-xl font-semibold">TileVision AI Visualizer</h2>
-          </div>
-        </div>
-        
-        <main>
-          <div className="grid lg:grid-cols-[1fr,400px] gap-8 items-start">
-            {/* Main Visualization Panel */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="aspect-[4/3] bg-muted rounded-lg overflow-hidden relative">
-                  {displayImageUrl ? (
-                    <img 
-                      src={displayImageUrl} 
-                      alt="Room visualization"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <p className="text-muted-foreground">Room visualization will appear here</p>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Room-specific controls */}
-                {selectedRoomType === 'hall-bedroom' && displayImageUrl && (
-                  <div className="mt-4 flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Palette className="w-4 h-4" />
-                      <span className="text-sm font-medium">Wall Color:</span>
-                      <input
-                        type="color"
-                        value={wallColor}
-                        onChange={(e) => handleWallColorChange(e.target.value)}
-                        className="w-8 h-8 rounded border cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Tile Library Panel */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-foreground">
-                    {selectedRoomType === 'hall-bedroom' ? 'Kajaria Tiles' : 'Design Sets'}
-                  </h3>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={handleGenerateAllDesigns}
-                    disabled={!displayImageUrl || isGeneratingShowcase}
-                  >
-                    <Wand2 className="w-4 h-4" />
-                    {isGeneratingShowcase ? 'Generating...' : 'Generate All Designs'}
-                  </Button>
-                </div>
-                
-                <ScrollArea className="h-96">
-                  <div className="space-y-4">
-                    {selectedRoomType === 'hall-bedroom' ? (
-                      // Individual tiles for hall & bedroom
-                      kajariaTiles.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <p>Upload an image to see available tiles.</p>
-                        </div>
-                      ) : (
-                        kajariaTiles.map((tile) => (
-                          <Card 
-                            key={tile.id} 
-                            className={`cursor-pointer transition-shadow ${
-                              displayImageUrl ? 'hover:shadow-md' : 'opacity-50'
-                            }`}
-                            onClick={() => displayImageUrl && handleTileApplication(tile)}
-                          >
-                            <CardContent className="p-4">
-                              <div className="flex items-start gap-3">
-                                <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
-                                  <span className="text-xs text-muted-foreground">Preview</span>
-                                </div>
-                                <div className="flex-1">
-                                  <h4 className="font-medium text-sm">{tile.name}</h4>
-                                  <p className="text-xs text-muted-foreground">{tile.series}</p>
-                                  <div className="flex items-center gap-2 mt-1">
-                                    <Badge variant="outline" className="text-xs">
-                                      {tile.code}
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-xs">
-                                      {tile.size}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        ))
-                      )
-                    ) : (
-                      // Tile sets for bathroom, kitchen, god-room
-                      tileSets.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <p>Upload an image to see available design sets.</p>
-                        </div>
-                      ) : (
-                        tileSets.map((tileSet) => (
-                          <TileSetCard
-                            key={tileSet.id}
-                            floorTile={tileSet.floorTile}
-                            wallTile={tileSet.wallTile}
-                            onClick={() => displayImageUrl && handleTileSetApplication(tileSet)}
-                            isSelected={selectedTileSet?.id === tileSet.id}
-                          />
-                        ))
-                      )
-                    )}
-                  </div>
-                </ScrollArea>
-              </CardContent>
-            </Card>
-          </div>
-        </main>
-        <Footer />
+    <div className="container mx-auto p-4">
+      <div className="mb-4">
+          <Header />
       </div>
-      
-      {/* Showcase Gallery Modal */}
-      <ShowcaseGallery
-        open={showShowcaseGallery}
-        onClose={() => setShowShowcaseGallery(false)}
-        designs={showcaseDesigns}
-        onDownloadFavorites={handleDownloadFavorites}
-      />
+      <div className="text-center mb-8">
+        <button 
+            onClick={handleStartOver} 
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 transition-colors shadow-sm"
+        >
+            Start Over
+        </button>
+      </div>
+      {renderEditor()}
+      <Footer />
     </div>
   );
 };
