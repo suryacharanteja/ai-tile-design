@@ -24,6 +24,8 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { ArrowLeft, Eye, Download, Wand2 } from 'lucide-react';
+import DesignGallery from '../components/DesignGallery';
+import { toast } from 'sonner';
 
 enum AppState {
   Initial,
@@ -177,6 +179,14 @@ const Index: React.FC = () => {
   const [uploadStep, setUploadStep] = useState<'upload' | 'detect' | 'select' | 'place'>('upload');
   const [selectedTiles, setSelectedTiles] = useState<Set<string>>(new Set());
   const [generatingMultiple, setGeneratingMultiple] = useState(false);
+  const [generatedDesigns, setGeneratedDesigns] = useState<Array<{
+    id: string;
+    imageUrl: string;
+    tileName: string;
+    tileCode: string;
+    tileSeries: string;
+  }>>([]);
+  const [isGalleryVisible, setIsGalleryVisible] = useState(false);
 
   const beforeImageRef = useRef<HTMLImageElement>(null);
   const afterImageRef = useRef<HTMLImageElement>(null);
@@ -237,6 +247,8 @@ const Index: React.FC = () => {
     setUploadStep('upload');
     setSelectedTiles(new Set());
     setGeneratingMultiple(false);
+    setGeneratedDesigns([]);
+    setIsGalleryVisible(false);
   }, []);
 
   const handleFileSelect = async (file: File) => {
@@ -810,27 +822,32 @@ ${otherObjectsContext}
     
     setGeneratingMultiple(true);
     clearError();
+    setGeneratedDesigns([]); // Clear previous results
     
     const tilesToGenerate = Array.from(selectedTiles).map(tileId => 
       kajariaTiles.find(tile => tile.id === tileId)!
     );
 
     try {
-      const generatedImages: string[] = [];
+      const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+      const newGeneratedDesigns = [];
       
       for (const tile of tilesToGenerate) {
         const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
         
-        const newImageUrl = await redesignFloor(originalImage, prompt);
-        generatedImages.push(newImageUrl);
+        const newImageUrl = await redesignFloor(currentImageFile, prompt);
+        newGeneratedDesigns.push({
+          id: `${tile.id}_${Date.now()}`,
+          imageUrl: newImageUrl,
+          tileName: tile.name,
+          tileCode: tile.code,
+          tileSeries: tile.series
+        });
       }
       
-      // For now, just set the last generated image as display
-      // In a full implementation, you'd want to show a gallery of all generated images
-      if (generatedImages.length > 0) {
-        setDisplayImageUrl(generatedImages[generatedImages.length - 1]);
-        updateHistory(generatedImages[generatedImages.length - 1]);
-      }
+      setGeneratedDesigns(newGeneratedDesigns);
+      setIsGalleryVisible(true);
+      toast.success(`Generated ${newGeneratedDesigns.length} designs!`);
       
     } catch (error) {
       console.error(error);
@@ -845,23 +862,28 @@ ${otherObjectsContext}
     
     setGeneratingMultiple(true);
     clearError();
+    setGeneratedDesigns([]); // Clear previous results
     
     try {
-      const generatedImages: string[] = [];
+      const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+      const newGeneratedDesigns = [];
       
       for (const tile of kajariaTiles) {
         const prompt = `Replace the floor in this room image with a photorealistic ${tile.name} tile pattern. The tile is from the ${tile.series} series, code ${tile.code}, size ${tile.size}. Apply the tile pattern only to the floor area while preserving all other elements of the room exactly as they are. The floor should look natural and realistic with proper lighting and perspective.`;
         
-        const newImageUrl = await redesignFloor(originalImage, prompt);
-        generatedImages.push(newImageUrl);
+        const newImageUrl = await redesignFloor(currentImageFile, prompt);
+        newGeneratedDesigns.push({
+          id: `${tile.id}_${Date.now()}`,
+          imageUrl: newImageUrl,
+          tileName: tile.name,
+          tileCode: tile.code,
+          tileSeries: tile.series
+        });
       }
       
-      // For now, just set the last generated image as display
-      // In a full implementation, you'd want to show a gallery of all generated images
-      if (generatedImages.length > 0) {
-        setDisplayImageUrl(generatedImages[generatedImages.length - 1]);
-        updateHistory(generatedImages[generatedImages.length - 1]);
-      }
+      setGeneratedDesigns(newGeneratedDesigns);
+      setIsGalleryVisible(true);
+      toast.success(`Generated ${newGeneratedDesigns.length} designs!`);
       
     } catch (error) {
       console.error(error);
@@ -1714,6 +1736,17 @@ ${otherObjectsContext}
       </div>
       {renderEditor()}
       <Footer />
+      
+      {/* Design Gallery */}
+      <DesignGallery 
+        designs={generatedDesigns}
+        isVisible={isGalleryVisible}
+        onClose={() => setIsGalleryVisible(false)}
+        onImageSelect={(imageUrl) => {
+          setDisplayImageUrl(imageUrl);
+          updateHistory(imageUrl);
+        }}
+      />
     </div>
   );
 };
