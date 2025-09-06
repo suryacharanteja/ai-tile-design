@@ -4,12 +4,13 @@
  */
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Home, Bath, Sparkles, ChefHat } from 'lucide-react';
 
 interface RoomTypeSelectorProps {
-  onRoomTypeSelect: (roomType: string) => void;
+  onRoomTypeSelect?: (roomType: string) => void;
 }
 
 const roomTypes = [
@@ -18,32 +19,46 @@ const roomTypes = [
     title: 'Hall & Bedroom',
     description: 'Premium tiles for living spaces',
     icon: Home,
-    gradient: 'bg-gradient-to-br from-primary/10 to-primary/20'
+    gradient: 'bg-gradient-to-br from-primary/10 to-primary/20',
+    path: '/hall-bedroom'
   },
   {
     id: 'bathroom',
     title: 'Bathroom',
     description: 'Water-resistant floor & wall sets',
     icon: Bath,
-    gradient: 'bg-gradient-to-br from-blue-500/10 to-blue-600/20'
+    gradient: 'bg-gradient-to-br from-blue-500/10 to-blue-600/20',
+    path: '/bathroom'
   },
   {
     id: 'god-room',
     title: 'God Room',
     description: 'Sacred space tile designs',
     icon: Sparkles,
-    gradient: 'bg-gradient-to-br from-amber-500/10 to-yellow-600/20'
+    gradient: 'bg-gradient-to-br from-amber-500/10 to-yellow-600/20',
+    path: '/god-room'
   },
   {
     id: 'kitchen',
     title: 'Kitchen',
     description: 'Durable kitchen floor & wall tiles',
     icon: ChefHat,
-    gradient: 'bg-gradient-to-br from-green-500/10 to-emerald-600/20'
+    gradient: 'bg-gradient-to-br from-green-500/10 to-emerald-600/20',
+    path: '/kitchen'
   }
 ];
 
 const RoomTypeSelector: React.FC<RoomTypeSelectorProps> = ({ onRoomTypeSelect }) => {
+  const navigate = useNavigate();
+
+  const handleRoomSelect = (room: typeof roomTypes[0]) => {
+    if (onRoomTypeSelect) {
+      onRoomTypeSelect(room.id);
+    } else {
+      navigate(room.path);
+    }
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto">
       <div className="text-center mb-8">
@@ -62,7 +77,7 @@ const RoomTypeSelector: React.FC<RoomTypeSelectorProps> = ({ onRoomTypeSelect })
             <Card 
               key={room.id}
               className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/30"
-              onClick={() => onRoomTypeSelect(room.id)}
+              onClick={() => handleRoomSelect(room)}
             >
               <CardContent className="p-8">
                 <div className={`${room.gradient} rounded-full w-16 h-16 flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform duration-300`}>
