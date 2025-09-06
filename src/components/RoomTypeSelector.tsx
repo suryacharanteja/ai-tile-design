@@ -7,10 +7,9 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Home, Bath, Sparkles, ChefHat } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 interface RoomTypeSelectorProps {
-  // No longer needed as we navigate directly
+  onRoomTypeSelect: (roomType: string) => void;
 }
 
 const roomTypes = [
@@ -44,13 +43,7 @@ const roomTypes = [
   }
 ];
 
-const RoomTypeSelector: React.FC<RoomTypeSelectorProps> = () => {
-  const navigate = useNavigate();
-
-  const handleRoomSelect = (roomId: string) => {
-    navigate(`/${roomId}`);
-  };
-
+const RoomTypeSelector: React.FC<RoomTypeSelectorProps> = ({ onRoomTypeSelect }) => {
   return (
     <div className="w-full max-w-4xl mx-auto">
       <div className="text-center mb-8">
@@ -69,7 +62,7 @@ const RoomTypeSelector: React.FC<RoomTypeSelectorProps> = () => {
             <Card 
               key={room.id}
               className="group hover:shadow-lg transition-all duration-300 cursor-pointer border-2 hover:border-primary/30"
-              onClick={() => handleRoomSelect(room.id)}
+              onClick={() => onRoomTypeSelect(room.id)}
             >
               <CardContent className="p-8">
                 <div className={`${room.gradient} rounded-full w-16 h-16 flex items-center justify-center mb-4 mx-auto group-hover:scale-110 transition-transform duration-300`}>
