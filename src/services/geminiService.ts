@@ -322,6 +322,59 @@ export const redesignFloor = async (
 };
 
 /**
+ * Specialized function for bathroom floor and wall redesign with enhanced wall coverage.
+ * Uses optimized prompting for better coverage of all bathroom wall surfaces.
+ * @param baseImageFile The original bathroom image file.
+ * @param prompt The detailed instructions for the AI with specific bathroom wall targeting.
+ * @returns A promise that resolves to the data URL of the generated image.
+ */
+export const redesignBathroomFloorAndWalls = async (
+  baseImageFile: File,
+  prompt: string,
+): Promise<string> => {
+    if (!import.meta.env.VITE_API_KEY) {
+        throw new Error("VITE_API_KEY environment variable is not set");
+    }
+    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
+    
+    const baseImagePart = await fileToPart(baseImageFile);
+    
+    // Enhanced prompt with specific bathroom wall targeting instructions
+    const enhancedPrompt = `${prompt}
+
+CRITICAL INSTRUCTIONS FOR COMPLETE WALL COVERAGE:
+- Identify and apply tiles to EVERY visible wall surface in this bathroom
+- Include main walls, side walls, shower/bathtub enclosure walls, vanity wall, toilet area wall
+- Ensure seamless tile application from floor to ceiling on all walls
+- Apply tiles behind all fixtures (toilet, sink, bathtub, shower)
+- Cover corner walls and any accent walls completely
+- Maintain consistent tile pattern alignment across all wall surfaces
+- Preserve original lighting, fixtures, and bathroom elements exactly as they are
+- The final result should show comprehensive tile coverage on all bathroom walls without any missed surfaces`;
+
+    const textPart = { text: enhancedPrompt };
+    const parts = [baseImagePart, textPart];
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: { parts },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    const imagePartFromResponse = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
+
+    if (imagePartFromResponse?.inlineData) {
+        const { mimeType, data } = imagePartFromResponse.inlineData;
+        return `data:${mimeType};base64,${data}`;
+    }
+
+    console.error("Model response did not contain an image part.", response);
+    throw new Error("The AI model did not return an image. Please try again.");
+};
+
+/**
  * Changes the color of an object in an image or applies a custom prompt.
  * @param imageFile The original image file.
  * @param selectedObject The name of the object to change.

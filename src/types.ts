@@ -85,3 +85,12 @@ export const standardPalettes = [
     colors: ["#F0FDF4", "#DCFCE7", "#86EFAC", "#4ADE80", "#22C55E", "#16A34A", "#15803D", "#14532D"]
   }
 ];
+
+// TileSet interface re-exported for easier importing
+export interface TileSet {
+  id: string;
+  name: string;
+  floorTile: any;
+  wallTile?: any;
+  roomTypes: string[];
+}

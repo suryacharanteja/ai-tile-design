@@ -234,6 +234,9 @@ export const getTileSetsByRoomType = (roomType: string): TileSet[] => {
   }
 };
 
+// Export bathroom tile sets for direct import
+export const BATHROOM_TILE_SETS = bathroomDesignSets;
+
 export const getKitchenModularSetsByRoomType = (roomType: string): KitchenModularSet[] => {
   switch (roomType) {
     case 'kitchen':
