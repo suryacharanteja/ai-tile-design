@@ -20,7 +20,7 @@ import ColorPickerPopover from '../components/ColorPickerPopover';
 import ParkingTileCard from '../components/ParkingTileCard';
 import { defaultParkingTiles, ParkingTile } from '../types/parkingTiles';
 import { generateModelImage, generateVirtualTryOnImage } from '../services/parkingTileService';
-import { changeColor } from '../services/geminiService';
+import { changeColor, detectObjects, DetectedObject } from '../services/geminiService';
 
 enum AppState {
   WaitingForImage,
@@ -47,6 +47,14 @@ const ParkingTiles: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [selectedStructure, setSelectedStructure] = useState<{category: string, name: string} | null>(null);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [detectedStructures, setDetectedStructures] = useState<{
+    mainStructural: Array<{name: string, highlighted: boolean}>;
+    decorativeElements: Array<{name: string, highlighted: boolean}>;
+  }>({
+    mainStructural: [],
+    decorativeElements: []
+  });
+  const [isDetectingStructures, setIsDetectingStructures] = useState(false);
   
   // Accordion states
   const [accordionState, setAccordionState] = useState({
@@ -110,6 +118,10 @@ const ParkingTiles: React.FC = () => {
       setStructureAnalyzedImageUrl(analyzedImageUrl);
       updateHistory(analyzedImageUrl);
       setAppState(AppState.Editing);
+      
+      // Automatically detect structures for the Structure Painter tab
+      detectStructureFeatures();
+      
       toast.success("Structure analysis completed! Parking surfaces detected.");
     } catch (error) {
       console.error(error);
@@ -197,6 +209,85 @@ const ParkingTiles: React.FC = () => {
   const handleStructureSelection = (category: string, name: string) => {
     setSelectedStructure({ category, name });
     setCustomPrompt('');
+    
+    // Toggle highlighting for the selected structure
+    setDetectedStructures(prev => ({
+      ...prev,
+      [category === 'main' ? 'mainStructural' : 'decorativeElements']: prev[category === 'main' ? 'mainStructural' : 'decorativeElements'].map(item => 
+        item.name === name ? { ...item, highlighted: !item.highlighted } : { ...item, highlighted: false }
+      )
+    }));
+  };
+
+  const detectStructureFeatures = async () => {
+    if (!originalImage) return;
+    
+    setIsDetectingStructures(true);
+    clearError();
+    
+    try {
+      const detectedObjects = await detectObjects(originalImage);
+      
+      // Categorize structures for parking spaces
+      const mainStructural = detectedObjects
+        .filter(obj => 
+          obj.name.toLowerCase().includes('driveway') ||
+          obj.name.toLowerCase().includes('garage') ||
+          obj.name.toLowerCase().includes('pathway') ||
+          obj.name.toLowerCase().includes('parking') ||
+          obj.name.toLowerCase().includes('surface') ||
+          obj.name.toLowerCase().includes('floor') ||
+          obj.name.toLowerCase().includes('facade') ||
+          obj.name.toLowerCase().includes('wall') ||
+          obj.name.toLowerCase().includes('building')
+        )
+        .map(obj => ({ name: obj.name, highlighted: false }));
+
+      const decorativeElements = detectedObjects
+        .filter(obj => 
+          obj.name.toLowerCase().includes('lighting') ||
+          obj.name.toLowerCase().includes('light') ||
+          obj.name.toLowerCase().includes('landscape') ||
+          obj.name.toLowerCase().includes('grass') ||
+          obj.name.toLowerCase().includes('concrete') ||
+          obj.name.toLowerCase().includes('edge') ||
+          obj.name.toLowerCase().includes('shadow') ||
+          obj.name.toLowerCase().includes('material') ||
+          obj.name.toLowerCase().includes('trim') ||
+          obj.name.toLowerCase().includes('accent')
+        )
+        .map(obj => ({ name: obj.name, highlighted: false }));
+
+      setDetectedStructures({
+        mainStructural,
+        decorativeElements
+      });
+      
+      toast.success("Structure features detected successfully!");
+    } catch (error) {
+      console.error("Error detecting structures:", error);
+      setErrorMessage("Failed to detect structure features. Using default options.");
+      
+      // Fallback to default structure options
+      setDetectedStructures({
+        mainStructural: [
+          { name: "Driveway Surface", highlighted: false },
+          { name: "Garage Floor", highlighted: false },
+          { name: "Pathway", highlighted: false },
+          { name: "Building Facade", highlighted: false }
+        ],
+        decorativeElements: [
+          { name: "Landscape Edges", highlighted: false },
+          { name: "Lighting Fixtures", highlighted: false },
+          { name: "Concrete Borders", highlighted: false },
+          { name: "Shadow Areas", highlighted: false }
+        ]
+      });
+      
+      toast.error("Using default structure options");
+    } finally {
+      setIsDetectingStructures(false);
+    }
   };
 
   const handleApplyStructureChange = async () => {
@@ -411,11 +502,16 @@ const ParkingTiles: React.FC = () => {
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        disabled={isGenerating}
+                        disabled={isGenerating || isDetectingStructures}
                         className="flex items-center space-x-2"
+                        onClick={detectStructureFeatures}
                       >
-                        <RefreshCw className="w-4 h-4" />
-                        <span>Refresh List</span>
+                        {isDetectingStructures ? (
+                          <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                        <span>{isDetectingStructures ? 'Detecting...' : 'Detect Structures'}</span>
                       </Button>
                     </div>
                     <p className="text-sm text-muted-foreground mt-1 mb-4">
@@ -439,17 +535,29 @@ const ParkingTiles: React.FC = () => {
                         </CollapsibleTrigger>
                         <CollapsibleContent className="mt-2">
                           <div className="flex flex-wrap gap-2 p-3 border rounded-md">
-                            {['Parking surfaces', 'Driveways', 'Garage floors', 'Pathways', 'Building facades', 'Wall elevation'].map(item => (
-                              <Button
-                                key={item}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleStructureSelection('main', item)}
-                                className={`text-sm ${selectedStructure?.name === item ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                              >
-                                {item}
-                              </Button>
-                            ))}
+                            {detectedStructures.mainStructural.length > 0 ? (
+                              detectedStructures.mainStructural.map(item => (
+                                <Button
+                                  key={item.name}
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleStructureSelection('main', item.name)}
+                                  className={`text-sm ${
+                                    selectedStructure?.name === item.name 
+                                      ? 'bg-primary text-primary-foreground' 
+                                      : item.highlighted 
+                                      ? 'bg-yellow-100 text-yellow-800 border-yellow-300' 
+                                      : 'hover:bg-muted'
+                                  }`}
+                                >
+                                  {item.name}
+                                </Button>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground p-2">
+                                Click "Detect Structures" to identify main structural elements in your image.
+                              </p>
+                            )}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
@@ -470,17 +578,29 @@ const ParkingTiles: React.FC = () => {
                         </CollapsibleTrigger>
                         <CollapsibleContent className="mt-2">
                           <div className="flex flex-wrap gap-2 p-3 border rounded-md">
-                            {['Landscape boundaries', 'Grass edges', 'Concrete borders', 'Lighting fixtures', 'Signage elements', 'Architectural details'].map(item => (
-                              <Button
-                                key={item}
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleStructureSelection('decorative', item)}
-                                className={`text-sm ${selectedStructure?.name === item ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                              >
-                                {item}
-                              </Button>
-                            ))}
+                            {detectedStructures.decorativeElements.length > 0 ? (
+                              detectedStructures.decorativeElements.map(item => (
+                                <Button
+                                  key={item.name}
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleStructureSelection('decorative', item.name)}
+                                  className={`text-sm ${
+                                    selectedStructure?.name === item.name 
+                                      ? 'bg-primary text-primary-foreground' 
+                                      : item.highlighted 
+                                      ? 'bg-yellow-100 text-yellow-800 border-yellow-300' 
+                                      : 'hover:bg-muted'
+                                  }`}
+                                >
+                                  {item.name}
+                                </Button>
+                              ))
+                            ) : (
+                              <p className="text-sm text-muted-foreground p-2">
+                                Click "Detect Structures" to identify decorative elements in your image.
+                              </p>
+                            )}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
