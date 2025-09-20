@@ -196,6 +196,12 @@ const Index: React.FC = () => {
   const clearError = () => setErrorMessage(null);
   
   const handleRoomTypeSelect = (roomType: string) => {
+    // Handle parking tiles navigation separately
+    if (roomType === 'parking-tiles') {
+      window.location.href = '/parking-tiles';
+      return;
+    }
+    
     setSelectedRoomType(roomType);
     setKajariaTiles(getTilesByRoomType(roomType));
     setCurrentView('visualizer');
