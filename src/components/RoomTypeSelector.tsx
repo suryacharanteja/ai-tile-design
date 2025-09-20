@@ -7,7 +7,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Home, Bath, Sparkles, ChefHat } from 'lucide-react';
+import { Home, Bath, Sparkles, ChefHat, Car } from 'lucide-react';
 
 interface RoomTypeSelectorProps {
   onRoomTypeSelect?: (roomType: string) => void;
@@ -45,6 +45,14 @@ const roomTypes = [
     icon: ChefHat,
     gradient: 'bg-gradient-to-br from-green-500/10 to-emerald-600/20',
     path: '/kitchen'
+  },
+  {
+    id: 'parking-tiles',
+    title: 'Parking Tiles',
+    description: 'Durable exterior tiles with AI visualization',
+    icon: Car,
+    gradient: 'bg-gradient-to-br from-slate-500/10 to-gray-600/20',
+    path: '/parking-tiles'
   }
 ];
 
@@ -70,7 +78,7 @@ const RoomTypeSelector: React.FC<RoomTypeSelectorProps> = ({ onRoomTypeSelect })
         </p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {roomTypes.map((room) => {
           const IconComponent = room.icon;
           return (
