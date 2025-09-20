@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { ArrowLeft, Car, Download, Palette, Wand2, Trash2, Hammer, MousePointer } from 'lucide-react';
+import { ArrowLeft, Car, Download, Palette, Wand2, Trash2, Hammer, MousePointer, ChevronDown, RefreshCw, Undo, Redo, ZoomIn, ZoomOut, RotateCcw, Maximize } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Textarea } from '../components/ui/textarea';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../components/ui/collapsible';
 import { toast } from 'sonner';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -30,16 +32,33 @@ enum AppState {
 const ParkingTiles: React.FC = () => {
   const navigate = useNavigate();
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
+  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [originalImage, setOriginalImage] = useState<File | null>(null);
   const [structureAnalyzedImageUrl, setStructureAnalyzedImageUrl] = useState<string | null>(null);
   const [appState, setAppState] = useState<AppState>(AppState.WaitingForImage);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedTiles, setSelectedTiles] = useState<Set<string>>(new Set());
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [selectedColor, setSelectedColor] = useState('#ffffff');
+  const [selectedColor, setSelectedColor] = useState('#36454F');
   const [imageHistory, setImageHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<'painter' | 'tiles' | 'placement'>('painter');
   const [applyingTileId, setApplyingTileId] = useState<string | null>(null);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [selectedStructure, setSelectedStructure] = useState<{category: string, name: string} | null>(null);
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  
+  // Accordion states
+  const [accordionState, setAccordionState] = useState({
+    mainStructural: true,
+    decorativeElements: false,
+    aiColors: false,
+    standardPalettes: false,
+  });
+
+  // References for images
+  const beforeImageRef = useRef<HTMLImageElement>(null);
+  const afterImageRef = useRef<HTMLImageElement>(null);
 
   const clearError = () => setErrorMessage(null);
 
@@ -54,15 +73,35 @@ const ParkingTiles: React.FC = () => {
   };
 
   const updateHistory = (newImageUrl: string) => {
-    setImageHistory(prev => [newImageUrl, ...prev.slice(0, 9)]);
+    const newHistory = [...imageHistory.slice(0, historyIndex + 1), newImageUrl];
+    setImageHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
     setDisplayImageUrl(newImageUrl);
+  };
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setDisplayImageUrl(imageHistory[newIndex]);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < imageHistory.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setDisplayImageUrl(imageHistory[newIndex]);
+    }
   };
 
   const handleFileSelect = useCallback(async (file: File) => {
     setOriginalImage(file);
     const imageUrl = URL.createObjectURL(file);
+    setOriginalImageUrl(imageUrl);
     setDisplayImageUrl(imageUrl);
     setImageHistory([imageUrl]);
+    setHistoryIndex(0);
     setAppState(AppState.StructureAnalyzing);
     clearError();
 
@@ -151,6 +190,45 @@ const ParkingTiles: React.FC = () => {
     setSelectedTiles(newSelectedTiles);
   };
 
+  const toggleAccordion = (key: keyof typeof accordionState) => {
+    setAccordionState(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleStructureSelection = (category: string, name: string) => {
+    setSelectedStructure({ category, name });
+    setCustomPrompt('');
+  };
+
+  const handleApplyStructureChange = async () => {
+    if (!displayImageUrl || !originalImage || (!selectedStructure && !customPrompt)) return;
+    clearError();
+    setAppState(AppState.Generating);
+
+    const prompt = customPrompt || 
+      `Modify the ${selectedStructure?.name.toLowerCase()} in this parking/exterior space to use the color ${selectedColor}. Apply this color change realistically while preserving all other elements, lighting, and textures exactly as they are.`;
+
+    try {
+      const currentImageFile = await dataUrlToFile(displayImageUrl, originalImage.name || 'current-scene.png');
+      const newImageUrl = await changeColor(currentImageFile, null, selectedColor, prompt);
+      updateHistory(newImageUrl);
+      setAppState(AppState.Editing);
+      toast.success("Structure color applied successfully!");
+    } catch (error) {
+      console.error(error);
+      setErrorMessage(error instanceof Error ? error.message : "Failed to apply structure color.");
+      setAppState(AppState.Editing);
+      toast.error("Failed to apply color. Please try again.");
+    }
+  };
+
+  // Standard color palettes
+  const standardColors = {
+    vibrantAccents: ['#DC143C', '#FFD700', '#1E90FF', '#32CD32', '#8A2BE2', '#FF8C00'],
+    architecturalNeutrals: ['#2C2C2C', '#696969', '#A9A9A9', '#DCDCDC', '#F5F5F5'],
+    earthyTones: ['#8B7355', '#A0522D', '#8B4513', '#654321', '#708090', '#2F4F4F'],
+    softPastels: ['#E6E6FA', '#B0E0E6', '#98FB98', '#F0E68C', '#FFC0CB', '#F5F5DC']
+  };
+
   const isGenerating = appState === AppState.Generating;
   const isAnalyzing = appState === AppState.StructureAnalyzing;
 
@@ -201,51 +279,19 @@ const ParkingTiles: React.FC = () => {
     <div className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button 
-              onClick={handleBackHome}
-              variant="ghost" 
-              size="sm"
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Home
-            </Button>
-            <div className="flex items-center gap-2">
-              <Car className="w-5 h-5 text-primary" />
-              <h1 className="text-xl font-semibold">Parking Tiles Visualizer</h1>
-            </div>
-          </div>
-          
+        <div className="mb-4 flex items-center gap-4">
+          <Button 
+            onClick={handleBackHome}
+            variant="ghost" 
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Home
+          </Button>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setColorPickerOpen(true)}
-            >
-              <Palette className="w-4 h-4 mr-2" />
-              Change Color
-            </Button>
-            {colorPickerOpen && (
-              <ColorPickerPopover
-                currentColor={selectedColor}
-                onColorChange={setSelectedColor}
-                onClose={() => {
-                  setColorPickerOpen(false);
-                  handleColorChange();
-                }}
-              />
-            )}
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={handleDownloadImage}
-              disabled={!displayImageUrl}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Download
-            </Button>
+            <Car className="w-5 h-5 text-primary" />
+            <h1 className="text-xl font-semibold">Parking Tiles Visualizer</h1>
           </div>
         </div>
 
@@ -255,32 +301,100 @@ const ParkingTiles: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Image Display */}
-          <div className="lg:col-span-2">
-            <Card className="p-4">
-              {displayImageUrl && (
-                <div className="relative">
+        {/* Before/After Layout */}
+        <div className="w-full max-w-7xl mx-auto animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Before Panel */}
+            <div className="w-full">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold">Before</h2>
+              </div>
+              <div className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden border border-border">
+                {originalImageUrl ? (
                   <img 
-                    src={displayImageUrl} 
-                    alt="Parking tiles visualization" 
-                    className="w-full h-auto rounded-lg border-2 border-border"
+                    ref={beforeImageRef} 
+                    src={originalImageUrl} 
+                    alt="Before" 
+                    className="w-full h-full object-contain pointer-events-none" 
                   />
-                  {(isGenerating || isAnalyzing) && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
-                      <div className="text-white text-center">
-                        <div className="animate-spin w-8 h-8 border-4 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
-                        <p>{isAnalyzing ? 'Analyzing structure...' : 'Applying tiles...'}</p>
-                      </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                    Awaiting image upload...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* After Panel */}
+            <div className="w-full">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold">After</h2>
+              </div>
+              <div className="relative w-full aspect-[4/3] bg-muted rounded-lg overflow-hidden border border-border">
+                {displayImageUrl ? (
+                  <img 
+                    ref={afterImageRef} 
+                    src={displayImageUrl} 
+                    alt="After" 
+                    className="w-full h-full object-contain pointer-events-none" 
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                    Awaiting generation...
+                  </div>
+                )}
+                
+                {(isGenerating || isAnalyzing) && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
+                    <div className="text-white text-center">
+                      <div className="animate-spin w-8 h-8 border-4 border-white border-t-transparent rounded-full mx-auto mb-2"></div>
+                      <p>{isAnalyzing ? 'Analyzing structure...' : 'Applying changes...'}</p>
                     </div>
-                  )}
+                  </div>
+                )}
+              </div>
+              
+              {/* Control Bar */}
+              <div className="flex items-center justify-between mt-4 p-2 bg-background rounded-lg border">
+                <div className="flex items-center space-x-1">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleUndo} 
+                    disabled={historyIndex <= 0}
+                  >
+                    <Undo className="w-4 h-4" />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleRedo} 
+                    disabled={historyIndex >= imageHistory.length - 1}
+                  >
+                    <Redo className="w-4 h-4" />
+                  </Button>
                 </div>
-              )}
-            </Card>
+                <div className="flex items-center space-x-1">
+                  <Button variant="ghost" size="sm"><ZoomIn className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm"><ZoomOut className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm"><RotateCcw className="w-4 h-4" /></Button>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={handleDownloadImage}
+                    disabled={!displayImageUrl || displayImageUrl === originalImageUrl}
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Tools Sidebar */}
-          <div className="space-y-4">
+          {/* Tools Section */}
+          <div className="bg-background p-6 rounded-lg border mt-8">
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'painter' | 'tiles' | 'placement')} className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="painter">Structure Painter</TabsTrigger>
@@ -288,58 +402,216 @@ const ParkingTiles: React.FC = () => {
                 <TabsTrigger value="placement">Structure Placement & Removal</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="painter" className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-semibold mb-4">1. Select an Object</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Click an object below. Use refresh after making changes to the image.
-                  </p>
-                  
-                  <div className="grid gap-2 mb-4">
-                    <Button variant="outline" size="sm" className="justify-start" disabled>
-                      <MousePointer className="w-4 h-4 mr-2" />
-                      Auto-Detect Parking Surfaces
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" disabled>
-                      <Hammer className="w-4 h-4 mr-2" />
-                      Building Facades
-                    </Button>
-                    <Button variant="outline" size="sm" className="justify-start" disabled>
-                      <Wand2 className="w-4 h-4 mr-2" />
-                      Landscape Boundaries
-                    </Button>
-                  </div>
-                  
-                  <div className="text-center">
-                    <Button variant="outline" size="sm" disabled>
-                      🔄 Refresh List
-                    </Button>
-                  </div>
-                  
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-4">Or Use a Custom Prompt</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Get creative with a custom prompt.
+              <TabsContent value="painter" className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Left column: Structure Selection */}
+                  <div>
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold text-foreground">1. Select a Structure Feature</h3>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        disabled={isGenerating}
+                        className="flex items-center space-x-2"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Refresh List</span>
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1 mb-4">
+                      Click a structure element below. Use refresh after making changes to the image.
                     </p>
-                    <div className="space-y-3">
-                      <p className="text-sm text-muted-foreground">
-                        AI structural detection identifies:
-                      </p>
-                      <ul className="text-sm space-y-1 text-muted-foreground">
-                        <li>• Parking surfaces (driveways, garage floors, pathways)</li>
-                        <li>• Building facades and elevation elements</li>
-                        <li>• Landscape boundaries (grass, concrete edges)</li>
-                        <li>• Existing surface materials</li>
-                        <li>• Lighting conditions and shadows</li>
-                        <li>• Perspective and viewing angles</li>
-                      </ul>
-                      {structureAnalyzedImageUrl && (
-                        <Badge variant="outline" className="text-green-600">
-                          Structural analysis complete
-                        </Badge>
-                      )}
+                    
+                    <div className="space-y-2">
+                      {/* Main Structural Elements */}
+                      <Collapsible 
+                        open={accordionState.mainStructural} 
+                        onOpenChange={() => toggleAccordion('mainStructural')}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                          >
+                            <span className="font-semibold">Main Structural Elements</span>
+                            <ChevronDown className={`w-4 h-4 transition-transform ${accordionState.mainStructural ? 'rotate-180' : ''}`} />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-2">
+                          <div className="flex flex-wrap gap-2 p-3 border rounded-md">
+                            {['Parking surfaces', 'Driveways', 'Garage floors', 'Pathways', 'Building facades', 'Wall elevation'].map(item => (
+                              <Button
+                                key={item}
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleStructureSelection('main', item)}
+                                className={`text-sm ${selectedStructure?.name === item ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                              >
+                                {item}
+                              </Button>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+
+                      {/* Decorative Elements */}
+                      <Collapsible 
+                        open={accordionState.decorativeElements} 
+                        onOpenChange={() => toggleAccordion('decorativeElements')}
+                      >
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full justify-between"
+                          >
+                            <span className="font-semibold">Decorating Elements</span>
+                            <ChevronDown className={`w-4 h-4 transition-transform ${accordionState.decorativeElements ? 'rotate-180' : ''}`} />
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="mt-2">
+                          <div className="flex flex-wrap gap-2 p-3 border rounded-md">
+                            {['Landscape boundaries', 'Grass edges', 'Concrete borders', 'Lighting fixtures', 'Signage elements', 'Architectural details'].map(item => (
+                              <Button
+                                key={item}
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleStructureSelection('decorative', item)}
+                                className={`text-sm ${selectedStructure?.name === item ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                              >
+                                {item}
+                              </Button>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     </div>
                   </div>
+
+                  {/* Right column: Custom Prompt */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Or Use a Custom Prompt</h3>
+                    <p className="text-sm text-muted-foreground mt-1 mb-4">
+                      Get creative with a custom prompt.
+                    </p>
+                    <Textarea
+                      value={customPrompt}
+                      onChange={(e) => {
+                        setCustomPrompt(e.target.value);
+                        setSelectedStructure(null);
+                      }}
+                      placeholder="e.g., 'Change the parking surface to dark asphalt', 'Make the building walls light gray'"
+                      className="w-full h-36 focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+
+                {/* Color Selection */}
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-4">2. Choose a Color</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="font-semibold text-sm text-foreground mb-2 block">Custom Color</label>
+                      <div className="relative">
+                        <Button 
+                          variant="outline"
+                          onClick={() => setIsColorPickerOpen(true)} 
+                          className="w-full max-w-xs border rounded-md p-2 flex items-center text-left hover:border-muted-foreground"
+                        >
+                          <div 
+                            className="w-5 h-5 rounded border border-border mr-3" 
+                            style={{ backgroundColor: selectedColor }}
+                          ></div>
+                          <span className="font-mono">{selectedColor}</span>
+                        </Button>
+                        {isColorPickerOpen && (
+                          <ColorPickerPopover 
+                            currentColor={selectedColor}
+                            onColorChange={setSelectedColor}
+                            onClose={() => setIsColorPickerOpen(false)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* AI Palette Suggestions */}
+                    <Collapsible 
+                      open={accordionState.aiColors} 
+                      onOpenChange={() => toggleAccordion('aiColors')}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between"
+                        >
+                          <span className="font-semibold">AI Palette Suggestions</span>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${accordionState.aiColors ? 'rotate-180' : ''}`} />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2">
+                        <div className="p-4 border rounded-md">
+                          <p className="text-sm text-muted-foreground mb-3">AI-suggested colors for parking and exterior spaces</p>
+                          <div className="grid grid-cols-6 gap-2">
+                            {['#2C3E50', '#34495E', '#7F8C8D', '#95A5A6', '#BDC3C7', '#ECF0F1'].map(color => (
+                              <button
+                                key={color}
+                                onClick={() => setSelectedColor(color)}
+                                className={`w-8 h-8 rounded border-2 ${selectedColor === color ? 'border-primary' : 'border-border'}`}
+                                style={{ backgroundColor: color }}
+                                title={color}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+
+                    {/* Standard Palettes */}
+                    <Collapsible 
+                      open={accordionState.standardPalettes} 
+                      onOpenChange={() => toggleAccordion('standardPalettes')}
+                    >
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-between"
+                        >
+                          <span className="font-semibold">Standard Palettes</span>
+                          <ChevronDown className={`w-4 h-4 transition-transform ${accordionState.standardPalettes ? 'rotate-180' : ''}`} />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2">
+                        <div className="p-4 border rounded-md space-y-4">
+                          {Object.entries(standardColors).map(([category, colors]) => (
+                            <div key={category}>
+                              <h4 className="text-sm font-medium mb-2 capitalize">
+                                {category.replace(/([A-Z])/g, ' $1').trim()}
+                              </h4>
+                              <div className="grid grid-cols-6 gap-2">
+                                {colors.map(color => (
+                                  <button
+                                    key={color}
+                                    onClick={() => setSelectedColor(color)}
+                                    className={`w-8 h-8 rounded border-2 ${selectedColor === color ? 'border-primary' : 'border-border'}`}
+                                    style={{ backgroundColor: color }}
+                                    title={color}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+
+                  <Button 
+                    onClick={handleApplyStructureChange}
+                    disabled={isGenerating || (!selectedStructure && !customPrompt)}
+                    className="w-full mt-6"
+                    size="lg"
+                  >
+                    {isGenerating ? 'Applying...' : 'Apply Color Change'}
+                  </Button>
                 </div>
               </TabsContent>
 
