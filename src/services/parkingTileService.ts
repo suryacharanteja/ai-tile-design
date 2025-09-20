@@ -55,16 +55,12 @@ const handleApiResponse = (response: GenerateContentResponse): string => {
     throw new Error(errorMessage);
 };
 
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 const model = 'gemini-2.5-flash-image-preview';
 
 export const generateModelImage = async (userImage: File): Promise<string> => {
-    if (!import.meta.env.VITE_API_KEY) {
-        throw new Error("VITE_API_KEY environment variable is not set");
-    }
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const userImagePart = await fileToPart(userImage);
     const prompt = "You are an expert exterior design AI. Analyze this exterior/parking space image and identify the parking areas, driveways, pathways, and building elevations. Detect and outline the surfaces where parking tiles can be applied. Provide clear identification of parking surfaces, existing materials, lighting conditions, and perspective angles. The image should maintain its original quality while highlighting detectable parking/driveway areas. Return ONLY the analyzed image with surface detection.";
-    
     const response = await ai.models.generateContent({
         model,
         contents: { parts: [userImagePart, { text: prompt }] },
@@ -76,10 +72,6 @@ export const generateModelImage = async (userImage: File): Promise<string> => {
 };
 
 export const generateVirtualTryOnImage = async (modelImageUrl: string, garmentImage: File): Promise<string> => {
-    if (!import.meta.env.VITE_API_KEY) {
-        throw new Error("VITE_API_KEY environment variable is not set");
-    }
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY });
     const modelImagePart = dataUrlToPart(modelImageUrl);
     const garmentImagePart = await fileToPart(garmentImage);
     const prompt = `You are an expert tile design visualization AI. You will be given an 'exterior space image' and a 'tile pattern image'. Your task is to create a new photorealistic image where the parking/driveway surfaces in the 'exterior space image' are covered with the tiles from the 'tile pattern image'.
@@ -91,7 +83,6 @@ export const generateVirtualTryOnImage = async (modelImageUrl: string, garmentIm
 4.  **Apply the Tiles:** Realistically apply the tile pattern to the parking/driveway surfaces. Tiles should follow the perspective, have proper grout lines, natural lighting, shadows, and realistic scale appropriate for parking/driveway use.
 5.  **Maintain Perspective:** Ensure tiles follow the ground plane perspective correctly with proper depth and viewing angle.
 6.  **Output:** Return ONLY the final, edited image with tiles applied to parking surfaces. Do not include any text.`;
-    
     const response = await ai.models.generateContent({
         model,
         contents: { parts: [modelImagePart, garmentImagePart, { text: prompt }] },
