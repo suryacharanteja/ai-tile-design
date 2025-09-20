@@ -55,26 +55,7 @@ const handleApiResponse = (response: GenerateContentResponse): string => {
     throw new Error(errorMessage);
 };
 
-const getApiKey = (): string => {
-  // Try to get from environment first (if available)
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (envKey) return envKey;
-  
-  // Otherwise get from localStorage (user input)
-  const storedKey = localStorage.getItem('gemini_api_key');
-  if (storedKey) return storedKey;
-  
-  // Prompt user for API key if not found
-  const userKey = prompt('Please enter your Gemini API Key:');
-  if (userKey) {
-    localStorage.setItem('gemini_api_key', userKey);
-    return userKey;
-  }
-  
-  throw new Error('Gemini API key is required. Please provide your API key.');
-};
-
-const ai = new GoogleGenAI({ apiKey: getApiKey() });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY! });
 
 const model = 'gemini-2.5-flash-image-preview';
 
