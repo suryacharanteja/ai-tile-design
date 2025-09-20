@@ -6,9 +6,9 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/button';
-import { ArrowLeft, Car, Download, Palette, Wand2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Car, Download, Palette, Wand2, Trash2, Hammer, MousePointer } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
-import { Card, CardContent } from '../components/ui/card';
+import { Card } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { toast } from 'sonner';
 import Header from '../components/Header';
@@ -16,7 +16,6 @@ import Footer from '../components/Footer';
 import ImageUploader from '../components/ImageUploader';
 import ColorPickerPopover from '../components/ColorPickerPopover';
 import ParkingTileCard from '../components/ParkingTileCard';
-import Spinner from '../components/Spinner';
 import { defaultParkingTiles, ParkingTile } from '../types/parkingTiles';
 import { generateModelImage, generateVirtualTryOnImage } from '../services/parkingTileService';
 import { changeColor } from '../services/geminiService';
@@ -39,7 +38,7 @@ const ParkingTiles: React.FC = () => {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#ffffff');
   const [imageHistory, setImageHistory] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'structure' | 'tiles' | 'placement'>('structure');
+  const [activeTab, setActiveTab] = useState<'painter' | 'tiles' | 'placement'>('painter');
   const [applyingTileId, setApplyingTileId] = useState<string | null>(null);
 
   const clearError = () => setErrorMessage(null);
@@ -282,33 +281,64 @@ const ParkingTiles: React.FC = () => {
 
           {/* Tools Sidebar */}
           <div className="space-y-4">
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'structure' | 'tiles' | 'placement')} className="w-full">
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'painter' | 'tiles' | 'placement')} className="w-full">
               <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="structure">Structure Painter</TabsTrigger>
+                <TabsTrigger value="painter">Structure Painter</TabsTrigger>
                 <TabsTrigger value="tiles">Try Parking Tiles</TabsTrigger>
-                <TabsTrigger value="placement">Structure Placement</TabsTrigger>
+                <TabsTrigger value="placement">Structure Placement & Removal</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="structure" className="space-y-4">
+              <TabsContent value="painter" className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Structure Painter</h3>
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      AI structural detection identifies:
+                  <h3 className="text-lg font-semibold mb-4">1. Select an Object</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Click an object below. Use refresh after making changes to the image.
+                  </p>
+                  
+                  <div className="grid gap-2 mb-4">
+                    <Button variant="outline" size="sm" className="justify-start" disabled>
+                      <MousePointer className="w-4 h-4 mr-2" />
+                      Auto-Detect Parking Surfaces
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" disabled>
+                      <Hammer className="w-4 h-4 mr-2" />
+                      Building Facades
+                    </Button>
+                    <Button variant="outline" size="sm" className="justify-start" disabled>
+                      <Wand2 className="w-4 h-4 mr-2" />
+                      Landscape Boundaries
+                    </Button>
+                  </div>
+                  
+                  <div className="text-center">
+                    <Button variant="outline" size="sm" disabled>
+                      🔄 Refresh List
+                    </Button>
+                  </div>
+                  
+                  <div className="mt-6">
+                    <h3 className="text-lg font-semibold mb-4">Or Use a Custom Prompt</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Get creative with a custom prompt.
                     </p>
-                    <ul className="text-sm space-y-1 text-muted-foreground">
-                      <li>• Parking surfaces (driveways, garage floors, pathways)</li>
-                      <li>• Building facades and elevation elements</li>
-                      <li>• Landscape boundaries (grass, concrete edges)</li>
-                      <li>• Existing surface materials</li>
-                      <li>• Lighting conditions and shadows</li>
-                      <li>• Perspective and viewing angles</li>
-                    </ul>
-                    {structureAnalyzedImageUrl && (
-                      <Badge variant="outline" className="text-green-600">
-                        Structural analysis complete
-                      </Badge>
-                    )}
+                    <div className="space-y-3">
+                      <p className="text-sm text-muted-foreground">
+                        AI structural detection identifies:
+                      </p>
+                      <ul className="text-sm space-y-1 text-muted-foreground">
+                        <li>• Parking surfaces (driveways, garage floors, pathways)</li>
+                        <li>• Building facades and elevation elements</li>
+                        <li>• Landscape boundaries (grass, concrete edges)</li>
+                        <li>• Existing surface materials</li>
+                        <li>• Lighting conditions and shadows</li>
+                        <li>• Perspective and viewing angles</li>
+                      </ul>
+                      {structureAnalyzedImageUrl && (
+                        <Badge variant="outline" className="text-green-600">
+                          Structural analysis complete
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               </TabsContent>
