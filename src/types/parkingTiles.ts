@@ -21,7 +21,7 @@ export const defaultParkingTiles: ParkingTile[] = [
     id: 'grey-concrete-interlocking',
     name: 'Grey Concrete Interlocking',
     productCode: 'PCT-001',
-    url: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=300&h=300&fit=crop',
+    url: 'https://githubyourcontent/gh/yourusername/ParkingTiles@main/tiles/grey-concrete-interlocking.jpg',
     category: 'Concrete',
     material: 'Concrete',
     finish: 'Textured',

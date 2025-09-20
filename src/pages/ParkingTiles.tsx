@@ -177,11 +177,14 @@ const ParkingTiles: React.FC = () => {
           </div>
           
           <div className="flex flex-col items-center justify-center text-center min-h-[70vh]">
-            <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4">
-              Design your Parking Tiles
-            </h2>
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Car className="w-12 h-12 text-primary" />
+              <h2 className="text-4xl md:text-6xl font-extrabold tracking-tight">
+                Design your Parking Tiles
+              </h2>
+            </div>
             <p className="mt-4 text-lg text-muted-foreground max-w-3xl mx-auto mb-8">
-              Durable exterior tiles with AI visualization. Upload your parking area image to see how our tiles will transform your driveway.
+              Durable exterior tiles with AI visualization
             </p>
             <ImageUploader 
               id="parking-uploader"
@@ -288,21 +291,22 @@ const ParkingTiles: React.FC = () => {
               
               <TabsContent value="structure" className="space-y-4">
                 <div>
-                  <h3 className="text-lg font-semibold mb-4">Structure Detection</h3>
+                  <h3 className="text-lg font-semibold mb-4">Structure Painter</h3>
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      AI has analyzed your parking space to detect:
+                      AI structural detection identifies:
                     </p>
                     <ul className="text-sm space-y-1 text-muted-foreground">
-                      <li>• Parking surfaces (driveways, garage floors)</li>
-                      <li>• Building facades and elevation</li>
-                      <li>• Landscape boundaries</li>
+                      <li>• Parking surfaces (driveways, garage floors, pathways)</li>
+                      <li>• Building facades and elevation elements</li>
+                      <li>• Landscape boundaries (grass, concrete edges)</li>
                       <li>• Existing surface materials</li>
                       <li>• Lighting conditions and shadows</li>
+                      <li>• Perspective and viewing angles</li>
                     </ul>
                     {structureAnalyzedImageUrl && (
                       <Badge variant="outline" className="text-green-600">
-                        Structure analysis complete
+                        Structural analysis complete
                       </Badge>
                     )}
                   </div>
@@ -332,24 +336,24 @@ const ParkingTiles: React.FC = () => {
                   <h3 className="text-lg font-semibold mb-4">Structure Placement & Removal</h3>
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      Modify exterior elements and structures:
+                      Modify external elements and parking structures:
                     </p>
                     <div className="grid gap-2">
                       <Button variant="outline" size="sm" className="justify-start">
                         <Wand2 className="w-4 h-4 mr-2" />
-                        Add Landscaping
+                        Add Landscape Elements
                       </Button>
                       <Button variant="outline" size="sm" className="justify-start">
                         <Car className="w-4 h-4 mr-2" />
-                        Place Vehicle
+                        Place Parking Structures
                       </Button>
                       <Button variant="outline" size="sm" className="justify-start">
                         <Trash2 className="w-4 h-4 mr-2" />
-                        Remove Elements
+                        Remove Exterior Elements
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Click on structures in the image to place or remove exterior elements.
+                      Customize external elevation and parking tile design elements.
                     </p>
                   </div>
                 </div>
